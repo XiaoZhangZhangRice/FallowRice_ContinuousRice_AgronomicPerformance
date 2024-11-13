@@ -1,0 +1,164 @@
+---
+title: "N uptake"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+# Necessary libraries
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(knitr)
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+# https://bookdown.org/ansellbr/WEHI_tidyR_course_book/
+library(stringr) 
+library(data.table)
+library(GGally)
+library(formatR)
+library(readxl)
+library(mgcv)
+library(xlsx)
+
+```
+
+# Data Organisation
+
+## Read from excel
+
+```{r}
+master <- read_excel("N uptake master.xlsx", sheet = 1)
+master$Sample_Weight <- as.numeric(master$Sample_Weight)
+master$Nrate <- master$Nrate*0.893
+master$NrateF <- as.factor(master$Nrate)
+
+str(master)
+```
+
+```{r}
+#Getting: g N per g of microbalanced sample (g/g)
+
+master$N_per_g_microbalanced_sample <- ((master$SIF_N)/(master$Sample_Weight))/1000
+
+#Total N uptake = g N per g of microbalanced sample (g/g)*total sample weight (g)/area harvested (m2) 
+#then scale from g/m2 to kg/ha
+
+area_hervested <- 1
+
+master$N_total <- ((master$N_per_g_microbalanced_sample * master$Dry_Sample_Weight)/1000) * (10000/area_hervested) *0.893
+
+str(master)
+
+write.xlsx(master, file = "Master Dataframe After R calculations.xlsx", sheetName = "1", append = FALSE) #xlsx package
+
+```
+
+# Total N uptake at maturity
+
+```{r}
+#filter for stage == rice grains or rice straw
+maturity <- master %>%  filter(Stage %in% c("Rice grains", "Rice straw"))
+
+#separate into straw and grain sofr summing
+maturity_straw <- maturity %>%  filter(Stage == ("Rice straw"))
+maturity_grain <- maturity %>%  filter(Stage == ("Rice grains"))
+
+#Create dataframe for maturity total N uptake
+total_N_maturity <- as.data.frame(rbind(maturity[1:48,], maturity[97:144,])) 
+# just so we can keep the other columns
+total_N_maturity$Stage <- "Maturity"
+
+#sum grain and straw into one maturity total N uptake dataframe
+total_N_maturity$N_total <- maturity_straw$N_total+maturity_grain$N_total
+```
+
+# Calculate NUE **CONTINUE WHEN THERE IS TIME**
+
+```{r}
+total_N_maturity$Field_Blk <- paste(total_N_maturity$Field, total_N_maturity$Blk, sep = "_")
+
+ref_N_total <- total_N_maturity %>%
+  filter(Nrate == 0) %>% filter(Nrate_Trial==1)
+```
+
+# Filter for only N rate trial total N uptake 
+
+```{r}
+total_N_maturity_NRate_Trial <- total_N_maturity %>% filter(Nrate_Trial==1)
+table(total_N_maturity_NRate_Trial$Nrate)
+
+#dataframe looks good
+table(total_N_maturity_NRate_Trial$Nrate)
+table(total_N_maturity_NRate_Trial$Field)
+head(total_N_maturity_NRate_Trial)
+```
+
+# Model selection 
+
+> No year effect
+
+```{r}
+
+model_exploration <- lm(N_total ~ NrateF+Field+Year+Blk, data = total_N_maturity_NRate_Trial)
+  
+  #lmer(N_total ~ NrateF*Field+(1|Field:Blk)+(1|NrateF:Blk), data=total_N_maturity_NRate_Trial)
+
+anova(model_exploration)
+```
+
+```{r}
+N_uptake_model <- lm(N_total~Field*NrateF, data = total_N_maturity_NRate_Trial)
+pls205_diagnostics(N_uptake_model)
+
+N_uptake_means = emmeans(N_uptake_model,spec = 'Field',by = 'NrateF')
+
+N_uptake_effects = contrast(N_uptake_means, method = 'pairwise', adjust = "Tukey")
+summary(N_uptake_effects)
+cld(N_uptake_means)
+```
+```{r}
+N_uptake_dataframe <- total_N_maturity_NRate_Trial %>% 
+    group_by(Field, Nrate) %>% 
+   mutate(N_total_sd = sd(N_total)) %>% 
+  summarise(N_total = mean(N_total),
+            N_total_sd = mean(N_total_sd)) 
+
+table(N_uptake_dataframe$Nrate)
+```
+
+
+```{r}
+N_uptake_graph <-
+ggplot(N_uptake_dataframe, aes(x=Nrate, y=N_total, color=Field))+
+  geom_point(data=N_uptake_dataframe, size=2.5)+#, shape = Year)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Field", labels = c('Continuous Rice','Fallow Rice'))+
+  scale_x_continuous(name="N Rate (lbN/ac)", limits = c(-5, 280), breaks = c(0, 100, 140, 165, 200, 230))+ #limits = c(0, 
+  scale_y_continuous(name= "N Uptake (lbN/ac)")+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
+  geom_errorbar(data=N_uptake_dataframe, aes(ymin=N_total-N_total_sd, ymax=N_total+N_total_sd), width=8, size=0.7)+
+  theme_classic()+theme(axis.text = element_text(size = 10), axis.title = element_text(size=10))+
+  geom_smooth(data = total_N_maturity_NRate_Trial, method = "lm", alpha=0.2)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "dashed", color = "black") +
+  theme(legend.text = element_text(size = 10),legend.title = element_text(size = 14))
+
+N_uptake_graph
+
+ggsave(N_uptake_graph, filename = "N_uptake_graph.png", height = 15, width = 20, units = "cm")
+```
+
+

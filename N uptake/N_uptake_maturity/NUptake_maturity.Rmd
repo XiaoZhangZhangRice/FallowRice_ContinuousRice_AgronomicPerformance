@@ -1,0 +1,343 @@
+---
+title: "N uptake maturity"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+# Necessary libraries
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+library(stringr) 
+library(readxl)
+library(writexl)
+library(ggpubr)
+```
+
+# Read and check data, split by year
+
+```{r}
+#read data
+master = read_excel('D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/N uptake calculations from SIF data/N_uptake_Maturity_Summed_Clean.xlsx', sheet = 1)
+
+master$NrateF <- as.factor(master$Nrate_kgha)
+
+Nrate_trial <- master %>% 
+  #filter(Year != 2023) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+Nrate_trial_2021 <- master %>% 
+  filter(Year == 2021) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+Nrate_trial_2022 <- master %>% 
+  filter(Year == 2022) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+Nrate_trial_2023 <- master %>% 
+  filter(Year == 2023) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+table(Nrate_trial_2021$Nrate_kgha)
+```
+
+# 2021 
+
+```{r}
+model_2021 <- lmer(N_total_kgha ~ NrateF*Treatment+(1|Treatment:Blk), data=Nrate_trial_2021)
+
+anova(model_2021)
+
+field_means_2021 = emmeans(model_2021,spec = 'Treatment',by = 'NrateF')
+field_effects_2021 = contrast(field_means_2021, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2021) 
+cld(field_means_2021)
+
+cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2021 <- cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak")
+```
+
+
+## Graph
+
+```{r}
+Nrate_trial_2021_dataframe <- Nrate_trial_2021 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>% 
+  summarise(N_total_kgha = mean(N_total_kgha),
+            N_total_kgha_se = mean(N_total_kgha_se)) 
+```
+
+
+```{r}
+Nuptake_graph_2021 <-
+ggplot(Nrate_trial_2021, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
+  geom_point(size=1, alpha=0.4)+
+  geom_point(data=Nrate_trial_2021_dataframe, size=2.5)+ #this is the mean values
+  scale_shape_manual(values = c("circle"))+
+  geom_smooth(aes(group = Treatment),method = lm, level = 0.95)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c("Continuous Rice (CR)", "Fallow Rice (FR)"))+
+   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), expand = c(0, 0), breaks = c(0,115,155,185,225,260))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 300), expand = c(0, 0), breaks = seq(0, 300, by = 50))+
+  #geom_errorbar(aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3,position=position_dodge(0.5))+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment, 
+    label =  paste(..rr.label..)),
+    show.legend = FALSE, 
+    label.x = 200,
+    label.y = c(60, 90))+
+  stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment,
+    label = paste(..eq.label..)),
+    show.legend = FALSE, 
+    label.x = 200, 
+    label.y = c(70, 100))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("N uptake"[maturity]~": 2021"))
+  #annotate(
+  #"text",
+  #x = c(0),
+  #y = Nrate_trial_2021_dataframe %>% 
+  #      filter(Treatment == "FR", Nrate_kgha == 0) %>% 
+  #      mutate(N_total_kgha_plus_higher = N_total_kgha + 25) %>% 
+  #      pull(N_total_kgha_plus_higher),
+  #label = "*",
+  #size = 7,
+  #vjust = 0
+  #)
+
+Nuptake_graph_2021
+```
+
+# 2022 
+
+```{r}
+model_2022 <- lmer(N_total_kgha ~ NrateF*Treatment+(1|Treatment:Blk), data=Nrate_trial_2022)
+
+anova(model_2022)
+
+field_means_2022 = emmeans(model_2022,spec = 'Treatment',by = 'NrateF')
+field_effects_2022 = contrast(field_means_2022, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2022) 
+cld(field_means_2022)
+
+cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2022 <- cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak")
+```
+
+
+## Graph
+
+```{r}
+Nrate_trial_2022_dataframe <- Nrate_trial_2022 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>% 
+  summarise(N_total_kgha = mean(N_total_kgha),
+            N_total_kgha_se = mean(N_total_kgha_se)) 
+  
+```
+
+```{r}
+Nuptake_graph_2022 <-
+ggplot(Nrate_trial_2022, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
+  geom_point(size=1, alpha=0.4, shape ="triangle")+
+  geom_point(data=Nrate_trial_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
+  #scale_shape_manual(values = c("triangle"))+
+  geom_smooth(aes(group = Treatment),method = lm, level = 0.95)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c("Continuous Rice (CR)", "Fallow Rice (FR)"))+
+   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), expand = c(0, 0), breaks = c(0,115,155,185,225,260))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 300), expand = c(0, 0), breaks = seq(0, 300, by = 50))+
+  #geom_errorbar(aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3,position=position_dodge(0.5))+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+   stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment, 
+    label =  paste(..rr.label..)),
+    show.legend = FALSE, 
+    label.x = 200,
+    label.y = c(60, 90))+
+  stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment,
+    label = paste(..eq.label..)),
+    show.legend = FALSE, 
+    label.x = 200, 
+    label.y = c(70, 100))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("N uptake"[maturity]~": 2022"))
+
+Nuptake_graph_2022
+```
+
+# 2023 
+
+```{r}
+model_2023 <- lmer(N_total_kgha ~ NrateF*Treatment+(1|Treatment:Blk), data=Nrate_trial_2023)
+
+anova(model_2023)
+
+field_means_2023 = emmeans(model_2023,spec = 'Treatment',by = 'NrateF')
+field_effects_2023 = contrast(field_means_2023, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2023) 
+cld(field_means_2023)
+
+cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2023 <- cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak")
+```
+
+
+## Graph
+
+```{r}
+Nrate_trial_2023_dataframe <- Nrate_trial_2023 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>% 
+  summarise(N_total_kgha = mean(N_total_kgha),
+            N_total_kgha_se = mean(N_total_kgha_se)) 
+  
+```
+
+```{r}
+Nuptake_graph_2023 <-
+ggplot(Nrate_trial_2023, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
+  geom_point(size=1, alpha=0.4, shape ="square")+
+  geom_point(data=Nrate_trial_2023_dataframe, size=2.5, shape ="square")+ #this is the mean values
+  #scale_shape_manual(values = c("square"))+
+  geom_smooth(aes(group = Treatment),method = lm, level = 0.95)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c("Continuous Rice (CR)", "Fallow Rice (FR)"))+
+   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), expand = c(0, 0), breaks = c(0, 90,120,150,180,210))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 300), expand = c(0, 0), breaks = seq(0, 300, by = 50))+
+  #geom_errorbar(aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3,position=position_dodge(0.5))+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+   stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment, 
+    label =  paste(..rr.label..)),
+    show.legend = FALSE, 
+    label.x = 200,
+    label.y = c(60, 90))+
+  stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment,
+    label = paste(..eq.label..)),
+    show.legend = FALSE, 
+    label.x = 200, 
+    label.y = c(70, 100))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("N uptake"[maturity]~": 2023"))
+
+
+Nuptake_graph_2023
+```
+
+# Overall 
+
+```{r}
+model_all <- lmer(N_total_kgha ~ NrateF*Treatment+(1|Treatment:Blk), data=Nrate_trial)
+
+anova(model_all)
+
+field_means_all = emmeans(model_all,spec = 'Treatment',by = 'NrateF')
+field_effects_all = contrast(field_means_all, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_all) 
+cld(field_means_all)
+
+cld(emmeans(model_all, ~ Treatment + NrateF),adjust = "Sidak")
+cld_all <- cld(emmeans(model_all, ~ Treatment + NrateF),adjust = "Sidak")
+```
+
+## Graph
+
+```{r}
+all_Nuptake_graph <-
+ggplot(Nrate_trial, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment,shape=Year))+
+  geom_point(size=2.5)+
+  geom_smooth(aes(group = Treatment),method = lm, level = 0.95)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c("Continuous rice (CR)", "Fallow rice (FR)"))+
+   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), expand = c(0, 0), breaks = seq(0, 300, by = 50))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 300), expand = c(0, 0), breaks = seq(0, 300, by = 50))+
+  #geom_errorbar(aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3,position=position_dodge(0.5))+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+    stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment, 
+    label =  paste(..rr.label..)),
+    show.legend = FALSE, 
+    label.x = 200,
+    label.y = c(60, 90))+
+  stat_regline_equation(aes(x=Nrate_kgha, y=N_total_kgha,color=Treatment,group = Treatment,
+    label = paste(..eq.label..)),
+    show.legend = FALSE, 
+    label.x = 200, 
+    label.y = c(70, 100))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("Total N uptake: All"))+
+  theme(legend.position = "bottom")
+
+all_Nuptake_graph
+```
+
+# Combine into 1 graph
+
+```{r}
+N_uptake_maturity <- ggarrange(Nuptake_graph_2021 + theme(legend.position = "none"),
+                               Nuptake_graph_2022 + theme(legend.position = "none"),
+                               Nuptake_graph_2023 + theme(legend.position = "none"),
+                               #all_Nuptake_graph,
+                               nrow = 1,
+                               ncol = 3,
+                               common.legend = TRUE,
+                               #legend.grob = get_legend(all_Nuptake_graph),
+                               legend= "bottom")
+
+
+ggsave(filename = "N_uptake_maturity.jpg",  # Include the file extension here
+       plot = N_uptake_maturity,              # Specify the plot
+       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       dpi = 400,
+       height = 20, width = 50, units = "cm")
+```
+
+# Combine 0N into one table
+
+```{r}
+all_means <- rbind(as.data.frame(field_means_2021) %>% mutate(Year = 2021),
+                   as.data.frame(field_means_2022) %>% mutate(Year = 2022),
+                   as.data.frame(field_means_2023) %>% mutate(Year = 2023),
+                   as.data.frame(field_means_all) %>% mutate(Year = "Avg")
+                  ) %>% arrange(Year) %>% filter(NrateF == "0") %>%
+  mutate(Nuptake = round(emmean, 1))
+
+write_xlsx(all_means, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/N_uptake_maturity/0N_Nuptake_By_Year.xlsx")
+```

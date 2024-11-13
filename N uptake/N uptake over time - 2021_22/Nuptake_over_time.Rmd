@@ -1,0 +1,500 @@
+---
+title: "N Uptake overtime"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+
+# Necessary libraries
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+library(stringr) 
+library(readxl)
+library(writexl)
+library(ggpubr)
+
+```
+
+# Read and check data
+
+```{r}
+#read data
+master = read_excel('N_uptake_over_time.xlsx', sheet = 1) 
+
+master$Days <- as.numeric(master$Days) 
+
+master <- master %>% mutate_if(is.character, as.factor)
+master$Nrate_kgha_F <- as.factor(master$Nrate_kgha)
+
+table(master$Stage)
+table(master$Treatment)
+table(master$Blk)
+table(master$Year)
+
+
+#dataset looks good and complete so lets have some fun huehuehue
+str(master)
+```
+# A litmus test to see what is happening
+
+Data looks okay. Treatment effect is very evident. Potential treatment by year interaction...
+
+```{r}
+all_data_model <- lm(N_total_kgha ~ Year*Stage*Treatment*Nrate_kgha, data = master)
+pls205_diagnostics(all_data_model)
+anova(all_data_model)
+
+all_data_model_lmer <- lmer(N_total_kgha ~ Year*Treatment+Nrate_kgha_F+(1|Blk:Treatment:Nrate_kgha_F), data = master)
+pls205_diagnostics(all_data_model_lmer, EU ="Blk:Treatment:Nrate_kgha_F")
+anova(all_data_model)
+
+```
+
+# Split by Nrate
+
+```{r}
+N_zero <- master %>% filter(Nrate_kgha == 0)
+N_zero_average <- N_zero
+N_zero_2021 <- N_zero %>% filter(Year ==2021) 
+N_zero_2022 <- N_zero %>% filter(Year ==2022)
+
+N_185 <-master %>% filter(Nrate_kgha == 185)
+N_185_average <- N_185
+N_185_2021 <- N_185 %>% filter(Year ==2021)
+N_185_2022 <- N_185 %>% filter(Year ==2022)
+```
+
+# 0N 
+
+## 2021 
+
+### Pairise Comparisons 2021
+
+```{r}
+N_zero_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_2021)
+
+anova(N_zero_model_2021)
+
+summary(N_zero_model_2021)
+
+pls205_diagnostics(N_zero_model_2021, EU="Blk:Treatment")
+
+N_zero_means_2021 = emmeans(N_zero_model_2021,spec = 'Treatment',by = 'Stage')
+N_zero_effects_2021 = contrast(N_zero_means_2021, method = 'pairwise', adjust = "tukey")
+summary(N_zero_effects_2021)
+
+N_zero_effects_2021_summary <- 
+  as.data.frame(summary(N_zero_effects_2021)) %>% 
+  mutate(
+    p_value = case_when(
+      p.value < 0.01 ~ "<0.01",           # For p-values less than 0.01
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_zero_means_2021)
+```
+
+### Graph_2021
+
+```{r}
+N_zero_graphing_2021 <- N_zero_2021 %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_zero_effects_2021_summary %>% select(Days, p_value), by = "Days") 
+
+N_zero_graph_2021 <- 
+ggplot(N_zero_2021, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_zero_graphing_2021, size=2.5)+
+  geom_line(data=N_zero_graphing_2021)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous rice (CR)", "Fallow rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N Uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_zero_graphing_2021, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_zero_graphing_2021 %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+10,
+  label=sprintf(p_value)), size=3, vjust=-0.5, color="black")+
+  ggtitle(expression("2021: 0 kg N ha"^{-1}*""))
+
+N_zero_graph_2021
+```
+## 2022 
+
+### Pairise Comparisons 2022
+
+```{r}
+N_zero_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_2022)
+
+anova(N_zero_model_2022)
+
+summary(N_zero_model_2022)
+
+pls205_diagnostics(N_zero_model_2022, EU="Blk:Treatment")
+
+N_zero_means_2022 = emmeans(N_zero_model_2022,spec = 'Treatment',by = 'Stage')
+N_zero_effects_2022 = contrast(N_zero_means_2022, method = 'pairwise', adjust = "tukey")
+summary(N_zero_effects_2022)
+
+N_zero_effects_2022_summary <- 
+  as.data.frame(summary(N_zero_effects_2022)) %>% 
+  mutate(
+    p_value = case_when(
+      p.value < 0.01 ~ "<0.01",           # For p-values less than 0.01
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_zero_means_2022)
+```
+
+### Graph_2022
+
+```{r}
+N_zero_graphing_2022 <- N_zero_2022 %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_zero_effects_2022_summary %>% select(Days, p_value), by = "Days") 
+
+N_zero_graph_2022 <- 
+ggplot(N_zero_2022, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_zero_graphing_2022, size=2.5)+
+  geom_line(data=N_zero_graphing_2022)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous rice (CR)", "Fallow rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N Uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_zero_graphing_2022, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_zero_graphing_2022 %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+10,
+  label=sprintf(p_value)), size=3, vjust=-0.5, color="black")+
+  ggtitle(expression("2022: 0 kg N ha"^{-1}*""))
+
+N_zero_graph_2022
+```
+
+## Average_zero
+
+### Pairise Comparisons average
+
+```{r}
+N_zero_model_average <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_average)
+
+anova(N_zero_model_average)
+
+summary(N_zero_model_average)
+
+pls205_diagnostics(N_zero_model_average, EU="Blk:Treatment")
+
+N_zero_means_average = emmeans(N_zero_model_average,spec = 'Treatment',by = 'Stage')
+N_zero_effects_average = contrast(N_zero_means_average, method = 'pairwise', adjust = "tukey")
+summary(N_zero_effects_average)
+
+N_zero_effects_average_summary <- 
+  as.data.frame(summary(N_zero_effects_average)) %>% 
+  mutate(
+    p_value = case_when(
+      p.value < 0.05 ~ "*",           # For p-values less than 0.05
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_zero_means_average)
+```
+
+### Graph_average
+
+```{r}
+N_zero_graphing_average <- N_zero_average %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(6)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_zero_effects_average_summary %>% select(Days, p_value), by = "Days") 
+
+N_zero_graph_average <- 
+ggplot(N_zero_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_zero_graphing_average, size=2.5)+
+  geom_line(data=N_zero_graphing_average)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous Rice (CR)", "Fallow Rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_zero_graphing_average, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_zero_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
+  label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
+  ggtitle(expression("N uptake over time: 0 kg N ha"^{-1}*""))
+
+N_zero_graph_average
+```
+
+
+# 185N 
+
+## 2021 
+
+### Pairise Comparisons 2021
+
+```{r}
+N_185_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_2021)
+
+anova(N_185_model_2021)
+
+summary(N_185_model_2021)
+
+pls205_diagnostics(N_185_model_2021, EU="Blk:Treatment")
+
+N_185_means_2021 = emmeans(N_185_model_2021,spec = 'Treatment',by = 'Stage')
+N_185_effects_2021 = contrast(N_185_means_2021, method = 'pairwise', adjust = "tukey")
+summary(N_185_effects_2021)
+
+N_185_effects_2021_summary <- 
+  as.data.frame(summary(N_185_effects_2021)) %>%
+   mutate(
+    p_value = case_when(
+      p.value < 0.01 ~ "<0.01",           # For p-values less than 0.01
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_185_means_2021)
+```
+
+### Graph_2021
+
+```{r}
+N_185_graphing_2021 <- N_185_2021 %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_185_effects_2021_summary %>% select(Days, p_value), by = "Days") 
+
+N_185_graph_2021 <- 
+ggplot(N_185_2021, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_185_graphing_2021, size=2.5)+
+  geom_line(data=N_185_graphing_2021)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous rice (CR)", "Fallow rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N Uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_185_graphing_2021, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_185_graphing_2021 %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+10,
+  label=sprintf(p_value)), size=3, vjust=-0.5, color="black")+
+  ggtitle(expression("2021: 185 kg N ha"^{-1}*""))
+```
+## 2022 
+
+### Pairise Comparisons 2022
+
+```{r}
+N_185_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_2022)
+
+anova(N_185_model_2022)
+
+summary(N_185_model_2022)
+
+pls205_diagnostics(N_185_model_2022, EU="Blk:Treatment")
+
+N_185_means_2022 = emmeans(N_185_model_2022,spec = 'Treatment',by = 'Stage')
+N_185_effects_2022 = contrast(N_185_means_2022, method = 'pairwise', adjust = "tukey")
+summary(N_185_effects_2022)
+
+N_185_effects_2022_summary <- 
+  as.data.frame(summary(N_185_effects_2022)) %>% 
+  mutate(
+    p_value = case_when(
+      p.value < 0.01 ~ "<0.01",           # For p-values less than 0.01
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_185_means_2022)
+```
+
+### Graph_2022
+
+```{r}
+N_185_graphing_2022 <- N_185_2022 %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(3)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_185_effects_2022_summary %>% select(Days, p_value), by = "Days") 
+
+N_185_graph_2022 <- 
+ggplot(N_185_2022, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_185_graphing_2022, size=2.5)+
+  geom_line(data=N_185_graphing_2022)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous rice (CR)", "Fallow rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N Uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_185_graphing_2022, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_185_graphing_2022 %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+10,
+  label=sprintf(p_value)), size=3, vjust=-0.5, color="black")+
+  ggtitle(expression("2022: 185 kg N ha"^{-1}*""))
+```
+
+
+## Average_185
+
+### Pairise Comparisons average
+
+```{r}
+N_185_model_average <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_average)
+
+anova(N_185_model_average)
+
+summary(N_185_model_average)
+
+pls205_diagnostics(N_185_model_average, EU="Blk:Treatment")
+
+N_185_means_average = emmeans(N_185_model_average,spec = 'Treatment',by = 'Stage')
+N_185_effects_average = contrast(N_185_means_average, method = 'pairwise', adjust = "tukey")
+summary(N_185_effects_average)
+
+N_185_effects_average_summary <- 
+  as.data.frame(summary(N_185_effects_average)) %>% 
+  mutate(
+    p_value = case_when(
+      p.value < 0.05 ~ "*",           # For p-values less than 0.05
+      TRUE ~ sprintf("%.2f", p.value)     # Force two decimal places for all other p-values
+    )
+  )%>%
+  mutate(Days = case_when(
+  Stage %in% c("PI") ~ "47",
+  Stage %in% c("Heading") ~ "82",
+  Stage %in% c("Maturity") ~ "134",
+  TRUE ~ "Other" # This line handles cases where plot is not listed
+  )) %>%
+  mutate(Days =as.numeric(Days))
+
+cld(N_185_means_average)
+```
+
+### Graph_average
+
+```{r}
+N_185_graphing_average <- N_185_average %>% 
+                  group_by(Treatment, Days) %>%
+                  mutate(N_total_kgha_se = sd(N_total_kgha)/sqrt(6)) %>%
+                  summarise(N_total_kgha = mean(N_total_kgha), N_total_kgha_se = mean(N_total_kgha_se))%>%
+                  left_join(N_185_effects_average_summary %>% select(Days, p_value), by = "Days") 
+
+N_185_graph_average <- 
+ggplot(N_185_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
+  geom_point(data=N_185_graphing_average, size=2.5)+
+  geom_line(data=N_185_graphing_average)+
+  scale_color_manual(values=c("#0072B2","#FFCC66"), labels = c("Continuous Rice (CR)", "Fallow Rice (FR)"))+
+  scale_x_continuous(name="Days after seeding", limits = c(35, 145), expand = c(0, 0), breaks = seq(0, 150, by = 20))+
+  scale_y_continuous(name=expression("N uptake (kg N ha"^{-1}*")"), limits = c(0, 255), expand = c(0, 0), breaks = seq(0, 250, by = 50))+
+  geom_errorbar(data=N_185_graphing_average, aes(ymin=N_total_kgha-N_total_kgha_se, ymax=N_total_kgha+N_total_kgha_se), width=3)+
+  #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
+  theme_classic()+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  geom_text(data=N_185_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
+  label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
+  ggtitle(expression("N uptake over time: 185 kg N ha"^{-1}*""))
+
+N_185_graph_average
+```
+
+# Combine graphs
+
+```{r}
+all_N_uptake_overtime <- ggarrange(#N_zero_graph_2021,
+                                   #N_zero_graph_2022,
+                                   N_zero_graph_average,
+                                   #N_185_graph_2021,
+                                   #N_185_graph_2022,
+                                   N_185_graph_average,
+                 nrow = 1,
+                 ncol = 2,
+                 common.legend = TRUE,
+                 legend= "bottom")
+
+all_N_uptake_overtime
+
+
+ggsave(all_N_uptake_overtime, 
+       filename = "all_N_uptake_overtime.jpg", 
+       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       height = 20, width = 30, 
+       units = "cm", dpi=400)
+
+```
+

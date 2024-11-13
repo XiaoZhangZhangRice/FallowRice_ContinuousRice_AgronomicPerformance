@@ -1,0 +1,881 @@
+---
+title: "N Rate Trial (no topdress)"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+editor_options:
+  markdown:
+    wrap: true
+---
+
+# Necessary libraries
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(knitr)
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+# https://bookdown.org/ansellbr/WEHI_tidyR_course_book/
+library(stringr) 
+library(data.table)
+library(GGally)
+library(formatR)
+library(readxl)
+library(mgcv)
+library(xlsx)
+library(writexl)
+library(ggpubr)
+```
+
+# Data Organisation
+
+## Read from excel
+
+```{r}
+master <- read_excel("master_yields.xlsx", sheet = 1)
+master$Treatment <- master$Field
+master <- mutate_if(master, is.character, as.factor)
+master$NrateF <- as.factor(master$Nrate)
+master$Year <- as.factor(master$Year)
+master$Yield_Mgha <- master$Yield_kgha/1000
+
+str(master)
+```
+
+
+# Initial visualisation
+
+```{r}
+ggplot(master, aes(y=Yield_Mgha, x=Nrate, color=Field))+ 
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size= 9))
+```
+
+# Check for most important variables
+
+> Year effect very significant. So analyse data by 3 different years. 
+
+```{r}
+all_factors_model <- lm(Yield_Mgha~Year+Blk+NrateF+Field+Topdressed, data = master)
+
+pls205_diagnostics(all_factors_model)
+
+anova(all_factors_model)
+```
+
+# Subset data from the 3 years
+
+```{r}
+master$main_plot <- paste(master$Blk, master$Treatment, sep="_")
+master$modular <- paste(as.numeric(master$Blk)%%3, master$Treatment, sep = "_")
+
+notopdress <- master %>% filter (Topdressed != 1)
+
+
+yield_average <- notopdress
+yield_2021 <- notopdress %>% filter (Year == "2021")
+yield_2022 <- notopdress %>% filter (Year == "2022")
+yield_2023 <- notopdress %>% filter (Year == "2023")
+#checked datasets, all looks good. 
+```
+
+# Treatment and year effect 
+
+```{r}
+model_all_years <- lmer(Yield_Mgha ~ Treatment*Year+(1|Blk:Treatment), data = yield_average)
+#lm(Yield_Mgha ~ Treatment*Year, data = yield_average)
+
+pls205_diagnostics(model_all_years, EU ="Blk:Treatment")
+
+anova(model_all_years)
+
+field_means_all_years = emmeans(model_all_years,spec = 'Treatment',by = 'Year')
+field_effects_all_years = contrast(field_means_all_years, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_all_years) 
+cld(field_means_all_years)
+
+anova_results <- as.data.frame(anova(model_all_years))
+```
+
+# Quadratic models
+
+## Automating the process with functions
+
+We will be assuming that the yield-nrate curve will follow a quadratic curve. It will be messy to extract all the coefficients and then compute local maxima of each treatment. So here is a function to do that. 
+
+```{r}
+#this function automates the extraction of coefficients from quadratic models to calculate optimal N rates and maximum yields
+
+optimal_N <- function(model) {
+  # Extract the coefficients
+  coefficients <- coef(model)
+  
+  # Get the names of the terms to make sure we handle your model's naming conventions
+  term_names <- names(coefficients)
+  
+  # Identify the names for the intercept, linear, and quadratic terms
+  intercept_term <- "(Intercept)"
+  linear_term <- term_names[grepl("^Nrate", term_names)]
+  quadratic_term <- term_names[grepl("I\\(Nrate\\^2\\)", term_names)]
+  
+  # Ensure both linear and quadratic terms are found
+  if (length(linear_term) == 0 | length(quadratic_term) == 0) {
+    stop("The model must include both Nrate and I(Nrate^2) terms.")
+  }
+  
+  # Extract individual coefficients
+  beta_0 <- coefficients[intercept_term]
+  beta_1 <- coefficients[linear_term]
+  beta_2 <- coefficients[quadratic_term]
+  
+  # Calculate the optimal N rate (x value) where the slope is zero
+  x_optimal <- -beta_1 / (2 * beta_2)
+  
+  # Calculate the corresponding y value at the optimal N rate
+  y_optimal <- beta_0 + beta_1 * x_optimal + beta_2 * x_optimal^2
+  
+  # Return both x and y values as a list
+  return(list(x_optimal = x_optimal, y_optimal = y_optimal))
+}
+
+#this function automates the construction of quadratic models
+
+run_all_models <- function() {
+  # Create an empty data frame to store the results
+  results <- data.frame(
+    Year = character(),
+    Treatment = character(),
+    Nrate_optimal = numeric(),
+    Yield_max = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Define the years and treatments
+  years <- c(2021, 2022, 2023, "average")
+  treatments <- c("CR", "FR")
+  
+  # Loop through each year and treatment
+  for (year in years) {
+    for (treatment in treatments) {
+      # Construct the model name dynamically
+      model_formula <- as.formula(paste0("Yield_Mgha ~ Nrate + I(Nrate^2)"))
+      data_name <- paste0("yield_", year)
+      model_data <- get(data_name) %>% filter(Treatment == treatment)
+      
+      # Fit the model for the current year and treatment
+      model <- lm(model_formula, data = model_data)
+      
+      # Calculate optimal Nrate and maximum yield using the optimal_N function
+      optimal_values <- optimal_N(model)
+      
+      # Add the results to the data frame
+      results <- rbind(results, data.frame(
+        Year = year,
+        Treatment = treatment,
+        Nrate_optimal = optimal_values$x_optimal,
+        Yield_max = optimal_values$y_optimal
+      ))
+    }
+  }
+  
+  return(results)
+}
+
+```
+
+## Quadratic regressions and optimal N rates
+
+```{r}
+#Here are all the optimal N rates
+
+optimal_results <- run_all_models()
+
+optimal_results
+
+optimal_results$Year <- as.factor(optimal_results$Year)
+
+write_xlsx(optimal_results, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Yield/optimalNrates.xlsx")
+```
+
+
+# Data visualisation
+
+## Graphing dataframes
+
+```{r}
+# 2021 dataframe
+
+yield_2021_dataframe <- yield_2021 %>% 
+    group_by(Treatment, Nrate) %>% 
+   mutate(Yield_Mgha_se = sd(Yield_Mgha)/sqrt(3)) %>% 
+  summarise(Yield_Mgha = mean(Yield_Mgha),
+            Yield_Mgha_se = mean(Yield_Mgha_se)) %>%
+  mutate(Year = "2021")%>%
+  left_join(optimal_results %>% select(Year, Treatment, Nrate_optimal), by = c("Year", "Treatment"))%>%
+  mutate(Nrate_optimal = round(Nrate_optimal))
+
+
+# 2022 dataframe
+
+yield_2022_dataframe <- yield_2022 %>% 
+    group_by(Treatment, Nrate) %>% 
+   mutate(Yield_Mgha_se = sd(Yield_Mgha)/sqrt(3)) %>% 
+  summarise(Yield_Mgha = mean(Yield_Mgha),
+            Yield_Mgha_se = mean(Yield_Mgha_se)) %>%
+  mutate(Year = "2022")%>%
+  left_join(optimal_results %>% select(Year, Treatment, Nrate_optimal), by = c("Year", "Treatment"))%>%
+  mutate(Nrate_optimal = round(Nrate_optimal))
+
+# 2023 dataframe
+
+yield_2023_dataframe <- yield_2023 %>% 
+    group_by(Treatment, Nrate) %>% 
+   mutate(Yield_Mgha_se = sd(Yield_Mgha)/sqrt(3)) %>% 
+  summarise(Yield_Mgha = mean(Yield_Mgha),
+            Yield_Mgha_se = mean(Yield_Mgha_se)) %>%
+  mutate(Year = "2023")%>%
+  left_join(optimal_results %>% select(Year, Treatment, Nrate_optimal), by = c("Year", "Treatment"))%>%
+  mutate(Nrate_optimal = round(Nrate_optimal))
+
+# average dataframe
+
+yield_average_dataframe <- yield_average %>% 
+    group_by(Treatment, Nrate) %>% 
+   mutate(Yield_Mgha_se = sd(Yield_Mgha)/sqrt(3)) %>% 
+  summarise(Yield_Mgha = mean(Yield_Mgha),
+            Yield_Mgha_se = mean(Yield_Mgha_se)) %>%
+  mutate(Year = "average")%>%
+  left_join(optimal_results %>% select(Year, Treatment, Nrate_optimal), by = c("Year", "Treatment"))%>%
+  mutate(Nrate_optimal = round(Nrate_optimal)) 
+```
+
+## 2021 
+
+### Statical test, comparisons by N rate and Treatment
+
+```{r}
+model_2021 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2021)
+
+anova(model_2021)
+
+field_means_2021 = emmeans(model_2021,spec = 'Treatment',by = 'NrateF')
+field_effects_2021 = contrast(field_means_2021, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2021) 
+cld(field_means_2021)
+
+emmeans(model_2021, ~ Treatment + NrateF)
+cld_2021 <- cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak")
+
+top_yields_2021 <- cld_2021 %>%
+  group_by(Treatment) %>%
+  filter(emmean == max(emmean)) %>%
+  ungroup()
+```
+
+
+### Graph_2021
+
+```{r}
+N_response_curve_2021 <- 
+ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
+  geom_point(data=yield_2021_dataframe, size=2.5)+ #this is the mean values
+  geom_point(data=yield_2021, size=1, alpha=0.4)+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
+  #geom_errorbar(data=yield_2021_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
+  theme_classic()+
+  geom_smooth(data = yield_2021, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  stat_regline_equation(data=yield_2021,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..rr.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(16.5, 19))+
+   stat_regline_equation(data=yield_2021,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..eq.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("Yield: 2021"))+
+  #annotate(
+  #"text",
+#  x = c(0),
+ # y = yield_2021_dataframe %>% 
+  #      filter(Treatment == "FR", Nrate == 0) %>% 
+   #     mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+    #    pull(Yield_Mgha_plus_higher),
+  #label = "*",
+  #size = 7,
+  #vjust = 0
+  #)+
+# Vertical line for CR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Vertical line for FR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+) +
+
+# Horizontal line for CR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Horizontal line for FR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+)+
+      geom_curve(x = top_yields_2021 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)-2, 
+                 y = top_yields_2021 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+               xend = top_yields_2021 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)-2, 
+               yend = top_yields_2021 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean),
+               color = 1, size=1,
+               curvature = 1.2,)+
+  annotate(
+  "text",
+  x =   (top_yields_2021 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)+
+       top_yields_2021 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF))/2,
+  y = (top_yields_2021 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean)+
+           top_yields_2021 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean))/2,
+  label = "ns",
+  size = 5,
+  vjust = 0.3,
+  hjust = +2.2 )
+  
+
+N_response_curve_2021
+
+```
+
+
+## 2022 
+
+### Statical test, comparisons by N rate and Treatment
+
+```{r}
+model_2022 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2022)
+
+anova(model_2022)
+
+field_means_2022 = emmeans(model_2022,spec = 'Treatment',by = 'NrateF')
+field_effects_2022 = contrast(field_means_2022, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2022) 
+cld(field_means_2022)
+
+emmeans(model_2022, ~ Treatment + NrateF)
+cld_2022 <- cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak")
+
+top_yields_2022 <- cld_2022 %>%
+  group_by(Treatment) %>%
+  filter(emmean == max(emmean)) %>%
+  ungroup()
+```
+
+
+### Graph_2022
+
+```{r}
+N_response_curve_2022 <- 
+ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
+  geom_point(data=yield_2022_dataframe %>% filter(Treatment == "FR"), 
+             aes(x=Nrate, y=Yield_Mgha, color="FR"), size=2.5, shape ="triangle") +  
+  geom_point(data=yield_2022_dataframe %>% filter(Treatment == "CR"), 
+             aes(x=Nrate, y=Yield_Mgha, color="CR"), size=2.5, shape ="triangle") +  
+  #geom_point(data=yield_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
+  geom_point(data=yield_2022, size=1, alpha=0.4, shape ="triangle")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
+  #geom_errorbar(data=yield_2022_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
+  theme_classic()+
+  geom_smooth(data = yield_2022, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("Yield: 2022"))+
+  
+# Vertical line for CR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Vertical line for FR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+) +
+
+# Horizontal line for CR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Horizontal line for FR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+)+
+  stat_regline_equation(data=yield_2022,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..rr.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(16.5, 19))+
+   stat_regline_equation(data=yield_2022,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..eq.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
+    geom_curve(x = top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+                 y = top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+               xend = top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+               yend = top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean),
+               color = 1, size=1,
+               curvature = -0.2)+
+  annotate(
+  "text",
+  x =   (top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)+
+       top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF))/2,
+  y = mean(top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+           top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)),
+  label = "ns",
+  size = 5,
+  vjust = -2,
+  hjust = 0.1 )
+  
+
+N_response_curve_2022
+
+```
+
+## 2023 
+
+### Statical test, comparisons by N rate and Treatment
+
+```{r}
+model_2023 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2023)
+
+anova(model_2023)
+
+field_means_2023 = emmeans(model_2023,spec = 'Treatment',by = 'NrateF')
+field_effects_2023 = contrast(field_means_2023, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_2023) 
+cld(field_means_2023)
+
+emmeans(model_2023, ~ Treatment + NrateF)
+cld_2023 <- cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak")
+
+top_yields_2023 <- cld_2023 %>%
+  group_by(Treatment) %>%
+  filter(emmean == max(emmean)) %>%
+  ungroup()
+```
+
+
+### Graph_2023
+
+```{r}
+N_response_curve_2023 <- 
+ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
+  geom_point(data=yield_2023_dataframe, size=2.5, shape ="square")+ #this is the mean values
+  geom_point(data=yield_2023, size=1, alpha=0.4, shape ="square")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 90, 120, 150, 180, 210), expand =c(0,0))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
+  #geom_errorbar(data=yield_2023_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
+  theme_classic()+
+  geom_smooth(data = yield_2023, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("Yield: 2023"))+
+
+# Vertical line for CR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Vertical line for FR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+) +
+
+# Horizontal line for CR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Horizontal line for FR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+)+
+    geom_curve(x = top_yields_2023 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+                 y = top_yields_2023 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean)+0.1,
+               xend = top_yields_2023 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+               yend = top_yields_2023 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)+0.1,
+               color = 1, size=1,
+               curvature = -0.2)+
+  stat_regline_equation(data=yield_2023,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..rr.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(16.5, 19))+
+   stat_regline_equation(data=yield_2023,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..eq.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
+  annotate(
+  "text",
+  x =   (top_yields_2023 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)+
+       top_yields_2023 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF))/2,
+  y = mean(top_yields_2023 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+           top_yields_2023 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)),
+  label = "ns",
+  size = 5,
+  vjust = -1.3,
+  hjust = 0.6)
+  
+
+N_response_curve_2023
+
+```
+
+## Average 
+
+### Statical test, comparisons by N rate and Treatment
+
+```{r}
+model_average <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_average)
+
+anova(model_average)
+
+field_means_average = emmeans(model_average,spec = 'Treatment',by = 'NrateF')
+field_effects_average = contrast(field_means_average, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_average) 
+cld(field_means_average)
+
+emmeans(model_average, ~ Treatment + NrateF)
+cld_average <- cld(emmeans(model_average, ~ Treatment + NrateF),adjust = "Sidak")
+
+top_yields_average <- cld_average %>%
+  group_by(Treatment) %>%
+  filter(emmean == max(emmean)) %>%
+  ungroup()
+```
+
+
+### Graph_average_with_equations
+
+```{r}
+N_response_curve_average_v1 <- 
+ggplot(yield_average_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
+  geom_point(data=yield_average_dataframe, size=2.5)+ #this is the mean values
+  geom_point(data=yield_average, size=1, alpha=0.4, aes(shape=Year))+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(-5, 290), breaks = c(0, 115, 155, 185, 225, 260))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 20), breaks = seq(0, 20, by = 2.5))+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
+  #geom_errorbar(data=yield_average_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
+  theme_classic()+
+  theme(axis.text = element_text(size = 10), axis.title = element_text(size=10))+
+  geom_smooth(data = yield_average, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  theme(legend.text = element_text(size = 10),legend.title = element_text(size = 14))+
+  stat_regline_equation(data=yield_average,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..rr.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(16.5, 19))+
+   stat_regline_equation(data=yield_average,
+                      aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+                          label = paste(..eq.label..)),
+                      formula = y ~ poly(x, 2, raw = TRUE),
+                      show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
+  
+  theme(plot.title = element_text(hjust = 0.5, size = 15))+
+  ggtitle(expression("average"))+
+  annotate(
+  "text",
+  x = c(0),
+  y = yield_average_dataframe %>% 
+        filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
+  geom_vline(
+    aes(xintercept = optimal_results %>% filter(Treatment == "CR") %>% filter(Year == "average") %>% pull(Nrate_optimal)),
+    linetype = "twodash", color = "#0072B2", size = 1
+  )+ 
+  geom_vline(
+    aes(xintercept = optimal_results %>% filter(Treatment == "FR") %>% filter(Year == "average") %>% pull(Nrate_optimal)),
+    linetype = "twodash", color = "#FFCC66", size = 1
+  )+
+    geom_curve(x = top_yields_average %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+                 y = top_yields_average %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean)+0.2,
+               xend = top_yields_average %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+               yend = top_yields_average %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)+0.2,
+               color = 1, size=1,
+               curvature = -0.2,
+               linetype = "twodash")+
+  annotate(
+  "text",
+  x =   (top_yields_average %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)+
+       top_yields_average %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF))/2,
+  y = mean(top_yields_average %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+           top_yields_average %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)),
+  label = "ns",
+  size = 5,
+  vjust = -0.9,
+  hjust = 0.6)
+  
+
+N_response_curve_average_v1
+```
+
+### Graph_average 
+
+```{r}
+N_response_curve_average <- 
+ggplot(yield_average, aes(x=Nrate, y=Yield_Mgha, color=Treatment, shape=Year))+
+  geom_point(data=yield_average, size=2)+ #this is the mean values+
+    geom_segment(x = -10, 
+            y = yield_average_dataframe %>% 
+                 filter(Nrate==0)  %>%
+                 filter(Treatment == "FR") %>% 
+                 pull(Yield_Mgha),
+            xend = 10, 
+            yend = yield_average_dataframe %>% 
+                 filter(Nrate==0)  %>%
+                 filter(Treatment == "FR") %>% 
+                 pull(Yield_Mgha),
+               color = "#FFCC66", size=2)+
+  geom_segment(x = -10, 
+            y = yield_average_dataframe %>% 
+                 filter(Nrate==0)  %>%
+                 filter(Treatment == "CR") %>% 
+                 pull(Yield_Mgha),
+            xend = 10, 
+            yend = yield_average_dataframe %>% 
+                 filter(Nrate==0)  %>%
+                 filter(Treatment == "CR") %>% 
+                 pull(Yield_Mgha),
+               color = "#0072B2", size=2)+
+  #geom_point(data=yield_average, size=1, alpha=0.4)+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+ scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
+  theme_classic()+
+  #geom_smooth(data = yield_average, aes(group = Treatment), method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  #stat_regline_equation(data=yield_average,
+   #                   aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+    #                      label = paste(..rr.label..)),
+     #                 formula = y ~ poly(x, 2, raw = TRUE),
+      #                show.legend = FALSE, label.x = 0, label.y = c(16.5, 19))+
+   #stat_regline_equation(data=yield_average,
+    #                  aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
+     #                     label = paste(..eq.label..)),
+      #                formula = y ~ poly(x, 2, raw = TRUE),
+       #               show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("Yield: All"))+
+  annotate(
+  "text",
+  x = c(0),
+  y = yield_average_dataframe %>% 
+        filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 2) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
+  theme(legend.position = "bottom")
+  
+
+
+N_response_curve_average
+
+```
+
+# Combine all plots
+
+```{r}
+Yields <- ggarrange(N_response_curve_2021,
+                    N_response_curve_2022,
+                    N_response_curve_2023,
+                    #N_response_curve_average,
+                               nrow = 1,
+                               ncol = 3,
+                               common.legend = TRUE,
+                               #legend.grob = get_legend(N_response_curve_average),
+                               legend= "bottom")
+
+Yields
+
+ggsave(filename = "Yields_no_avg.jpg",  # Include the file extension here
+       plot = Yields,              # Specify the plot
+       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       dpi = 400,
+       height = 20, width = 50, units = "cm")
+```
+
+# Combine 0N yields into 1 excel file 
+
+```{r}
+all_means <- rbind(as.data.frame(field_means_2021) %>% mutate(Year = 2021),
+                   as.data.frame(field_means_2022) %>% mutate(Year = 2022),
+                   as.data.frame(field_means_2023) %>% mutate(Year = 2023),
+                   as.data.frame(field_means_average) %>% mutate(Year = "Avg")
+                  ) %>% arrange(Year) %>% filter(NrateF == "0") %>%
+  mutate(yield = round(emmean, 1))
+
+write_xlsx(all_means, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Yield/Yield_by_year_0N.xlsx")
+
+```

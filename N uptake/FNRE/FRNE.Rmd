@@ -1,0 +1,373 @@
+---
+title: "Apparent Fertilizer Nitrogen  Recovery Efficiency (FNRE)"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+  html_notebook:
+    toc: yes
+    toc_float: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+# Necessary libraries
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+library(stringr) 
+library(readxl)
+library(writexl)
+library(ggpubr)
+```
+
+# Read and check data
+
+```{r}
+#read data
+master = read_excel('D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/N uptake calculations from SIF data/N_uptake_Maturity_Summed_Clean.xlsx', sheet = 1)
+
+#making sure that the master datFNREame will be correct 
+master <- master %>% filter(Stage=="Maturity") %>% filter(Topdress != 1)
+```
+
+
+# Calculate FNRE for each plot
+
+```{r}
+
+# Define the FNRE calculation function
+calculate_FNRE <- function(data) {
+  
+  # Ensure the datFNREame is grouped by Year, Block, and Treatment
+  FNRE_df <- data %>%
+    group_by(Year, Blk, Treatment) %>%
+    
+    # Nest the data within each Year, Blk, Treatment group
+    do({
+      # Separate 0N plot (reference plot with no nitrogen application)
+      zero_nitrogen_plot <- .[.$Nrate_kgha == 0,]
+      
+      # Ensure there's a 0N plot to reference
+      if (nrow(zero_nitrogen_plot) == 0) {
+        stop("No 0N plot found in one of the groups!")
+      }
+      
+      # Calculate FNRE for the rest of the plots in the group
+      mutate(., FNRE = (N_total_kgha - zero_nitrogen_plot$N_total_kgha) / Nrate_kgha)
+    })
+  
+  # Ungroup to return a regular datFNREame
+  FNRE_df <- FNRE_df %>%
+    ungroup()
+  
+  return(FNRE_df)
+}
+
+
+master_with_FNRE <- calculate_FNRE(master) %>% 
+  mutate(FNRE = FNRE*100) %>% 
+  filter(Nrate_kgha !=0) %>% 
+  mutate(NrateF = as.factor(Nrate_kgha))
+
+#write_xlsx(master_with_FNRE, "C:/Users/zhang/Desktop/master_with_FNRE.xlsx")
+#manuallychecked and all looks correct
+```
+
+# Split data by year
+
+```{r}
+FNRE_all <- master_with_FNRE %>% 
+  #filter(Year != 2023) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+FNRE_2021 <- master_with_FNRE %>% 
+  filter(Year == 2021) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+FNRE_2022 <- master_with_FNRE %>% 
+  filter(Year == 2022) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+FNRE_2023 <- master_with_FNRE %>% 
+  filter(Year == 2023) %>% 
+  filter(Topdress!=1) %>% 
+  filter(Stage=="Maturity") %>%
+  mutate(Year= as.factor(Year))
+
+table(FNRE_2021$Nrate_kgha)
+```
+
+# General linear model to do some exploratory analysis
+
+Seems that there is an effect of Nrate and Year. But no treatment effects. 
+
+```{r}
+all_factors_model <- lm(FNRE ~ Nrate_kgha*Treatment*Year, data = FNRE_all)
+
+pls205_diagnostics(all_factors_model)
+
+anova(all_factors_model)
+```
+
+# 2021
+
+## Statistical tests
+
+```{r}
+model_2021 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2021)
+
+pls205_diagnostics(model_2021, EU="Treatment:Blk")
+
+anova(model_2021)
+
+means_2021 = emmeans(model_2021,spec = 'Treatment',by = 'NrateF')
+effects_2021 = contrast(means_2021, method = 'pairwise', adjust = "Tukey")
+
+summary(effects_2021) 
+cld(means_2021)
+
+emmeans(model_2021, ~ Treatment + NrateF)
+cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2021 <- cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak") %>% mutate(Nrate_kgha = as.numeric(paste(NrateF))) %>% mutate(group =.group)
+```
+
+
+## 2021 graph
+
+### Graphing dataframe
+
+```{r}
+graphing_2021 <- FNRE_2021 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(FNRE_se = sd(FNRE)/sqrt(3)) %>% 
+  summarise(FNRE = mean(FNRE),
+            FNRE_se = mean(FNRE_se)) %>%
+  left_join(cld_2021 %>% select(Treatment, Nrate_kgha, group), by = c("Treatment", "Nrate_kgha"))
+```
+
+### ggplot_2021
+
+
+```{r}
+FNRE_2021_graph <- 
+ggplot(graphing_2021, aes(x=Nrate_kgha, y=FNRE, color=Treatment))+
+  geom_point(data=graphing_2021, size=2.5)+ #this is the mean values
+  geom_point(data=FNRE_2021, size=1, alpha=0.4)+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(80, 280), breaks = c(115, 155, 185, 225, 260))+
+  scale_y_continuous(name= expression("FNRE (%)"), limits = c(0, 100), breaks = seq(0, 100, by = 20))+ 
+  theme_classic()+
+  geom_smooth(data = FNRE_2021, method = "lm", se = FALSE)+
+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("FNRE: 2021"))
+
+FNRE_2021_graph
+```
+# 2022
+
+## Statistical tests
+
+```{r}
+model_2022 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2022)
+
+pls205_diagnostics(model_2022, EU="Treatment:Blk")
+
+anova(model_2022)
+
+means_2022 = emmeans(model_2022,spec = 'Treatment',by = 'NrateF')
+effects_2022 = contrast(means_2022, method = 'pairwise', adjust = "Tukey")
+
+summary(effects_2022) 
+cld(means_2022)
+
+emmeans(model_2022, ~ Treatment + NrateF)
+cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2022 <- cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak") %>% mutate(Nrate_kgha = as.numeric(paste(NrateF))) %>% mutate(group =.group)
+```
+
+
+## 2022 graph
+
+### Graphing dataframe
+
+```{r}
+graphing_2022 <- FNRE_2022 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(FNRE_se = sd(FNRE)/sqrt(3)) %>% 
+  summarise(FNRE = mean(FNRE),
+            FNRE_se = mean(FNRE_se)) %>%
+  left_join(cld_2022 %>% select(Treatment, Nrate_kgha, group), by = c("Treatment", "Nrate_kgha"))
+```
+
+### ggplot_2022
+```{r}
+FNRE_2022_graph <- 
+ggplot(graphing_2022, aes(x=Nrate_kgha, y=FNRE, color=Treatment))+
+  geom_point(data=graphing_2022, size=2.5,shape ="triangle")+ #this is the mean values
+  geom_point(data=FNRE_2022, size=1, alpha=0.4,shape ="triangle")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(80, 280), breaks = c(115, 155, 185, 225, 260))+
+  scale_y_continuous(name= expression("FNRE (%)"), limits = c(0, 100), breaks = seq(0, 100, by = 20))+ 
+  theme_classic()+
+  geom_smooth(data = FNRE_2022, method = "lm", se = FALSE)+
+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("FNRE: 2022"))
+
+FNRE_2022_graph
+```
+# 2023
+
+## Statistical tests
+
+```{r}
+model_2023 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2023)
+
+pls205_diagnostics(model_2023, EU="Treatment:Blk")
+
+anova(model_2023)
+
+means_2023 = emmeans(model_2023,spec = 'Treatment',by = 'NrateF')
+effects_2023 = contrast(means_2023, method = 'pairwise', adjust = "Tukey")
+
+summary(effects_2023) 
+cld(means_2023)
+
+emmeans(model_2023, ~ Treatment + NrateF)
+cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak")
+cld_2023 <- cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak") %>% mutate(Nrate_kgha = as.numeric(paste(NrateF))) %>% mutate(group =.group)
+```
+
+## 2023 graph
+
+### Graphing dataframe
+
+```{r}
+graphing_2023 <- FNRE_2023 %>% 
+    group_by(Treatment, Nrate_kgha) %>% 
+   mutate(FNRE_se = sd(FNRE)/sqrt(3)) %>% 
+  summarise(FNRE = mean(FNRE),
+            FNRE_se = mean(FNRE_se)) %>%
+  left_join(cld_2023 %>% select(Treatment, Nrate_kgha, group), by = c("Treatment", "Nrate_kgha"))
+```
+
+### ggplot_2023
+
+```{r}
+FNRE_2023_graph <- 
+ggplot(graphing_2023, aes(x=Nrate_kgha, y=FNRE, color=Treatment))+
+  geom_point(data=graphing_2023, size=2.5, shape ="square")+ #this is the mean values
+  geom_point(data=FNRE_2023, size=1, alpha=0.4, shape ="square")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(80, 280), breaks = c(90,120,150,180,210))+
+  scale_y_continuous(name= expression("FNRE (%)"), limits = c(0, 100), breaks = seq(0, 100, by = 20))+ 
+  theme_classic()+
+  geom_smooth(data = FNRE_2023, method = "lm", se = FALSE)+
+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("FNRE: 2023"))
+
+FNRE_2023_graph
+```
+
+# All together
+
+## Statistical tests
+
+```{r}
+model_average <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_all)
+
+anova(model_average)
+
+field_means_average = emmeans(model_average,spec = 'Treatment',by = 'NrateF')
+field_effects_average = contrast(field_means_average, method = 'pairwise', adjust = "Tukey")
+
+summary(field_effects_average) 
+cld(field_means_average)
+
+emmeans(model_average, ~ Treatment + NrateF)
+cld(emmeans(model_average, ~ Treatment + NrateF),adjust = "Sidak")
+cld_average <- cld(emmeans(model_average, ~ Treatment + NrateF),adjust = "Sidak")
+```
+
+
+## All together graph
+
+```{r}
+FNRE_all_graph <- 
+ggplot(FNRE_all, aes(x=Nrate_kgha, y=FNRE, color=Treatment, shape = Year))+
+  geom_point(size=2.5)+ #this is the mean values
+  #geom_point(data=FNRE_2023, size=1, alpha=0.4, shape ="square")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(80, 280), breaks = seq(80, 280, by = 50))+
+  scale_y_continuous(name= expression("FNRE (%)"), limits = c(0, 100), breaks = seq(0, 100, by = 20))+ 
+  theme_classic()+
+  geom_smooth(aes(group = Treatment), method = "lm", se = FALSE)+
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  ggtitle(expression("FNRE: All"))+
+  theme(legend.position = "bottom")
+
+FNRE_all_graph
+```
+
+
+# Combine into 1 graph
+
+```{r}
+FNRE_combined <- ggarrange(FNRE_2021_graph,
+                               FNRE_2022_graph,
+                               FNRE_2023_graph,
+                               FNRE_all_graph,
+                               nrow = 2,
+                               ncol = 2,
+                               #common.legend = TRUE,
+                               legend.grob = get_legend(FNRE_all_graph),
+                               legend= "bottom")
+
+
+ggsave(filename = "FNRE_combined.jpg",  # Include the file extension here
+       plot = FNRE_combined,              # Specify the plot
+       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       dpi = 400,
+       height = 30, width = 40, units = "cm")
+```
+
+# Combine into 1 excel file 
+
+```{r}
+all_means <- rbind(as.data.frame(means_2021) %>% mutate(Year = 2021),
+                   as.data.frame(means_2022) %>% mutate(Year = 2022),
+                   as.data.frame(means_2023) %>% mutate(Year = 2023)
+) %>% arrange(Treatment,Year)
+
+write_xlsx(all_means, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/FNRE/FNRE_by_year_Nrate.xlsx")
+
+```
+
