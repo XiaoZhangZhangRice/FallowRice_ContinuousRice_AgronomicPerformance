@@ -56,7 +56,7 @@ str(master)
 ```
 # A litmus test to see what is happening
 
-Data looks okay. Treatment effect is very evident. Potential treatment by year interaction...
+Data looks okay. Treatment effect is very evident. 
 
 ```{r}
 all_data_model <- lm(N_total_kgha ~ Year*Stage*Treatment*Nrate_kgha, data = master)
@@ -90,7 +90,7 @@ N_185_2022 <- N_185 %>% filter(Year ==2022)
 ### Pairise Comparisons 2021
 
 ```{r}
-N_zero_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_2021)
+N_zero_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment)+(1|Blk), data = N_zero_2021)
 
 anova(N_zero_model_2021)
 
@@ -149,12 +149,13 @@ ggplot(N_zero_2021, aes(x=Days, y=N_total_kgha, color=Treatment))+
 
 N_zero_graph_2021
 ```
+
 ## 2022 
 
 ### Pairise Comparisons 2022
 
 ```{r}
-N_zero_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_2022)
+N_zero_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment)+(1|Blk), data = N_zero_2022)
 
 anova(N_zero_model_2022)
 
@@ -219,7 +220,7 @@ N_zero_graph_2022
 ### Pairise Comparisons average
 
 ```{r}
-N_zero_model_average <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_zero_average)
+N_zero_model_average <- lmer(N_total_kgha~Treatment*Stage*Year+(1|Blk:Treatment)+(1|Blk), data = N_zero_average)
 
 anova(N_zero_model_average)
 
@@ -287,7 +288,7 @@ N_zero_graph_average
 ### Pairise Comparisons 2021
 
 ```{r}
-N_185_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_2021)
+N_185_model_2021 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment)+(1|Blk), data = N_185_2021)
 
 anova(N_185_model_2021)
 
@@ -349,7 +350,7 @@ ggplot(N_185_2021, aes(x=Days, y=N_total_kgha, color=Treatment))+
 ### Pairise Comparisons 2022
 
 ```{r}
-N_185_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_2022)
+N_185_model_2022 <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment)+(1|Blk), data = N_185_2022)
 
 anova(N_185_model_2022)
 
@@ -413,7 +414,7 @@ ggplot(N_185_2022, aes(x=Days, y=N_total_kgha, color=Treatment))+
 ### Pairise Comparisons average
 
 ```{r}
-N_185_model_average <- lmer(N_total_kgha~Treatment*Stage+(1|Blk:Treatment), data = N_185_average)
+N_185_model_average <- lmer(N_total_kgha~Treatment*Stage*Year+(1|Blk:Treatment)+(1|Blk), data = N_185_average)
 
 anova(N_185_model_average)
 

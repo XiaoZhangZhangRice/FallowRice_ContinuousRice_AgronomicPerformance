@@ -75,11 +75,9 @@ anova(all_factors_model)
 # Subset data from the 3 years
 
 ```{r}
-master$main_plot <- paste(master$Blk, master$Treatment, sep="_")
-master$modular <- paste(as.numeric(master$Blk)%%3, master$Treatment, sep = "_")
-
+#master$main_plot <- paste(master$Blk, master$Treatment, sep="_")
+#master$modular <- paste(as.numeric(master$Blk)%%3, master$Treatment, sep = "_")
 notopdress <- master %>% filter (Topdressed != 1)
-
 
 yield_average <- notopdress
 yield_2021 <- notopdress %>% filter (Year == "2021")
@@ -88,19 +86,19 @@ yield_2023 <- notopdress %>% filter (Year == "2023")
 #checked datasets, all looks good. 
 ```
 
-# Treatment and year effect 
+# Treatment and year effect (Corresponds to Table 1: ANOVA)
 
 ```{r}
-model_all_years <- lmer(Yield_Mgha ~ Treatment*Year+(1|Blk:Treatment), data = yield_average)
+model_all_years <- lmer(Yield_Mgha ~ Treatment*Year++NrateF+NrateF:Treatment+Treatment:Year+(1|Blk:Treatment)+(1|Blk), data = yield_average)
 #lm(Yield_Mgha ~ Treatment*Year, data = yield_average)
 
 pls205_diagnostics(model_all_years, EU ="Blk:Treatment")
+pls205_diagnostics(model_all_years, EU ="Blk")
 
 anova(model_all_years)
 
 field_means_all_years = emmeans(model_all_years,spec = 'Treatment',by = 'Year')
 field_effects_all_years = contrast(field_means_all_years, method = 'pairwise', adjust = "Tukey")
-
 summary(field_effects_all_years) 
 cld(field_means_all_years)
 
@@ -204,11 +202,15 @@ optimal_results
 
 optimal_results$Year <- as.factor(optimal_results$Year)
 
-write_xlsx(optimal_results, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Yield/optimalNrates.xlsx")
+quadraticModel_2023_FR <- lm(Yield_Mgha ~ I(Nrate) + I(Nrate^2), data= yield_2023 %>% filter(Treatment=="FR"))
+
+summary(quadraticModel_2023_FR)
+
+write_xlsx(optimal_results, "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Yield/optimalNrates.xlsx")
 ```
 
 
-# Data visualisation
+# Data visualisation and statistical testing (Corresponds to Figure 2)
 
 ## Graphing dataframes
 
@@ -264,7 +266,7 @@ yield_average_dataframe <- yield_average %>%
 ### Statical test, comparisons by N rate and Treatment
 
 ```{r}
-model_2021 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2021)
+model_2021 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=yield_2021)
 
 anova(model_2021)
 
@@ -276,6 +278,8 @@ cld(field_means_2021)
 
 emmeans(model_2021, ~ Treatment + NrateF)
 cld_2021 <- cld(emmeans(model_2021, ~ Treatment + NrateF),adjust = "Sidak")
+
+cld_2021
 
 top_yields_2021 <- cld_2021 %>%
   group_by(Treatment) %>%
@@ -292,7 +296,8 @@ ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_point(data=yield_2021_dataframe, size=2.5)+ #this is the mean values
   geom_point(data=yield_2021, size=1, alpha=0.4)+ #this are the raw values
   scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
-  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
+  #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
   #geom_errorbar(data=yield_2021_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
   theme_classic()+
@@ -312,17 +317,17 @@ ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   ggtitle(expression("Yield: 2021"))+
-  #annotate(
-  #"text",
-#  x = c(0),
- # y = yield_2021_dataframe %>% 
-  #      filter(Treatment == "FR", Nrate == 0) %>% 
-   #     mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
-    #    pull(Yield_Mgha_plus_higher),
-  #label = "*",
-  #size = 7,
-  #vjust = 0
-  #)+
+  annotate(
+  "text",
+  x = c(0),
+  y = yield_2021_dataframe %>% 
+       filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
 # Vertical line for CR
 geom_segment(
   aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2021") %>% pull(Nrate_optimal), 
@@ -404,7 +409,7 @@ N_response_curve_2021
 ### Statical test, comparisons by N rate and Treatment
 
 ```{r}
-model_2022 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2022)
+model_2022 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=yield_2022)
 
 anova(model_2022)
 
@@ -417,10 +422,14 @@ cld(field_means_2022)
 emmeans(model_2022, ~ Treatment + NrateF)
 cld_2022 <- cld(emmeans(model_2022, ~ Treatment + NrateF),adjust = "Sidak")
 
+cld_2022
+
 top_yields_2022 <- cld_2022 %>%
   group_by(Treatment) %>%
   filter(emmean == max(emmean)) %>%
   ungroup()
+
+top_yields_2022
 ```
 
 
@@ -436,7 +445,8 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   #geom_point(data=yield_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
   geom_point(data=yield_2022, size=1, alpha=0.4, shape ="triangle")+ #this are the raw values
   scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
-  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
+  #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
   #geom_errorbar(data=yield_2022_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
   theme_classic()+
@@ -445,8 +455,19 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  theme(legend.position = "bottom")+
   ggtitle(expression("Yield: 2022"))+
-  
+  annotate(
+  "text",
+  x = c(0),
+  y = yield_2022_dataframe %>% 
+       filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
 # Vertical line for CR
 geom_segment(
   aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal), 
@@ -529,7 +550,6 @@ geom_segment(
   
 
 N_response_curve_2022
-
 ```
 
 ## 2023 
@@ -537,7 +557,7 @@ N_response_curve_2022
 ### Statical test, comparisons by N rate and Treatment
 
 ```{r}
-model_2023 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_2023)
+model_2023 <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=yield_2023)
 
 anova(model_2023)
 
@@ -549,6 +569,8 @@ cld(field_means_2023)
 
 emmeans(model_2023, ~ Treatment + NrateF)
 cld_2023 <- cld(emmeans(model_2023, ~ Treatment + NrateF),adjust = "Sidak")
+
+cld_2023
 
 top_yields_2023 <- cld_2023 %>%
   group_by(Treatment) %>%
@@ -565,7 +587,8 @@ ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_point(data=yield_2023_dataframe, size=2.5, shape ="square")+ #this is the mean values
   geom_point(data=yield_2023, size=1, alpha=0.4, shape ="square")+ #this are the raw values
   scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
-  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 90, 120, 150, 180, 210), expand =c(0,0))+ #limits = c(0, 
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
+  #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 90, 120, 150, 180, 210), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
   #geom_errorbar(data=yield_2023_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
   theme_classic()+
@@ -575,7 +598,17 @@ ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   ggtitle(expression("Yield: 2023"))+
-
+annotate(
+  "text",
+  x = c(0),
+  y = yield_2023_dataframe %>% 
+       filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
 # Vertical line for CR
 geom_segment(
   aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2023") %>% pull(Nrate_optimal), 
@@ -666,7 +699,7 @@ N_response_curve_2023
 ### Statical test, comparisons by N rate and Treatment
 
 ```{r}
-model_average <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Treatment:Blk), data=yield_average)
+model_average <- lmer(Yield_Mgha ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=yield_average)
 
 anova(model_average)
 
@@ -861,9 +894,15 @@ Yields
 
 ggsave(filename = "Yields_no_avg.jpg",  # Include the file extension here
        plot = Yields,              # Specify the plot
-       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
        dpi = 400,
        height = 20, width = 50, units = "cm")
+
+ggsave(filename = "2022_NResponse.jpg",  # Include the file extension here
+       plot = N_response_curve_2022,              # Specify the plot
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
+       dpi = 400,
+       height = 15, width = 15, units = "cm")
 ```
 
 # Combine 0N yields into 1 excel file 
@@ -876,6 +915,137 @@ all_means <- rbind(as.data.frame(field_means_2021) %>% mutate(Year = 2021),
                   ) %>% arrange(Year) %>% filter(NrateF == "0") %>%
   mutate(yield = round(emmean, 1))
 
-write_xlsx(all_means, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Yield/Yield_by_year_0N.xlsx")
+write_xlsx(all_means, "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Yield/Yield_by_year_0N.xlsx")
+```
 
+
+# Zero N
+
+```{r}
+zero_N <- yield_average %>% filter(Nrate == 0)
+
+model_zero <- lmer(Yield_Mgha ~ Treatment*Year+(1|Blk), data=zero_N)
+
+zero_means_average = emmeans(model_zero,spec = 'Treatment', by = "Year")
+zero_effects_average = contrast(zero_means_average, method = 'pairwise', adjust = "Tukey")
+summary(zero_effects_average)
+```
+
+# Graphical abstract
+
+```{r}
+N_response_curve_graphical_abstract <- 
+ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
+  geom_point(data=yield_2022_dataframe %>% filter(Treatment == "FR"), 
+             aes(x=Nrate, y=Yield_Mgha, color="FR"), size=2.5) +  
+  geom_point(data=yield_2022_dataframe %>% filter(Treatment == "CR"), 
+             aes(x=Nrate, y=Yield_Mgha, color="CR"), size=2.5) +  
+  #geom_point(data=yield_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
+  #geom_point(data=yield_2022, size=1, alpha=0.4, shape ="triangle")+ #this are the raw values
+  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = seq(0, 300, by=50), expand =c(0,0))+ #limits = c(0, 
+  scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
+  #geom_errorbar(data=yield_2022_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
+  theme_classic()+
+  geom_smooth(data = yield_2022, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
+  #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
+  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
+  theme(legend.position = "bottom")+
+  #ggtitle(expression("Yield: 2022"))+
+  annotate(
+  "text",
+  x = c(0),
+  y = yield_2022_dataframe %>% 
+       filter(Treatment == "FR", Nrate == 0) %>% 
+        mutate(Yield_Mgha_plus_higher = Yield_Mgha + 1) %>% 
+        pull(Yield_Mgha_plus_higher),
+  label = "*",
+  size = 7,
+  vjust = 0
+  )+
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Vertical line for FR
+geom_segment(
+  aes(x = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
+      y = 0,  # Start exactly from 0 on y-axis
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+) +
+
+# Horizontal line for CR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "CR", Year == "2022") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#0072B2", size = 0.6
+) +
+# Horizontal line for FR
+geom_segment(
+  aes(y = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
+      yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
+      x = -20,  # Start exactly from 0 on x-axis
+      xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal)),
+  linetype = "twodash", color = "#FFCC66", size = 0.6
+)+
+    geom_curve(x = top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+                 y = top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+               xend = top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF), 
+               yend = top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean),
+               color = 1, size=1,
+               curvature = -0.2)+
+  annotate(
+  "text",
+  x =   (top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF)+
+       top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 mutate(NrateF = as.numeric(paste(NrateF))) %>% 
+                 pull(NrateF))/2,
+  y = mean(top_yields_2022 %>% 
+                 filter(Treatment == "FR") %>% 
+                 pull(emmean),
+           top_yields_2022 %>% 
+                 filter(Treatment == "CR") %>% 
+                 pull(emmean)),
+  label = "ns",
+  size = 5,
+  vjust = -2,
+  hjust = 0.1 )+
+  theme(axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()
+        )+
+theme(legend.title=element_blank())
+  
+
+N_response_curve_graphical_abstract
+
+ggsave(filename = "N_response_curve_graphical_abstract.jpg",  # Include the file extension here
+       plot = N_response_curve_graphical_abstract,              # Specify the plot
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
+       dpi = 800,
+       height = 10, width = 10.5, units = "cm")
 ```

@@ -36,7 +36,7 @@ library(ggpubr)
 
 ```{r}
 #read data
-master = read_excel('D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/N uptake calculations from SIF data/N_uptake_Maturity_Summed_Clean.xlsx', sheet = 1)
+master = read_excel('C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/N uptake/N uptake calculations from SIF data/N_uptake_Maturity_Summed_Clean.xlsx', sheet = 1)
 
 #making sure that the master datFNREame will be correct 
 master <- master %>% filter(Stage=="Maturity") %>% filter(Topdress != 1)
@@ -132,9 +132,9 @@ anova(all_factors_model)
 ## Statistical tests
 
 ```{r}
-model_2021 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2021)
+model_2021 <- lmer(FNRE ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=FNRE_2021)
 
-pls205_diagnostics(model_2021, EU="Treatment:Blk")
+pls205_diagnostics(model_2021, EU="Blk:Treatment")
 
 anova(model_2021)
 
@@ -184,14 +184,16 @@ ggplot(graphing_2021, aes(x=Nrate_kgha, y=FNRE, color=Treatment))+
 
 FNRE_2021_graph
 ```
+
+
 # 2022
 
 ## Statistical tests
 
 ```{r}
-model_2022 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2022)
+model_2022 <- lmer(FNRE ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=FNRE_2022)
 
-pls205_diagnostics(model_2022, EU="Treatment:Blk")
+pls205_diagnostics(model_2022, EU="Blk:Treatment")
 
 anova(model_2022)
 
@@ -239,14 +241,16 @@ ggplot(graphing_2022, aes(x=Nrate_kgha, y=FNRE, color=Treatment))+
 
 FNRE_2022_graph
 ```
+
+
 # 2023
 
 ## Statistical tests
 
 ```{r}
-model_2023 <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_2023)
+model_2023 <- lmer(FNRE ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=FNRE_2023)
 
-pls205_diagnostics(model_2023, EU="Treatment:Blk")
+pls205_diagnostics(model_2023, EU="Blk:Treatment")
 
 anova(model_2023)
 
@@ -300,7 +304,7 @@ FNRE_2023_graph
 ## Statistical tests
 
 ```{r}
-model_average <- lmer(FNRE ~ NrateF*Treatment+(1|Treatment:Blk), data=FNRE_all)
+model_average <- lmer(FNRE ~ NrateF*Treatment+(1|Blk:Treatment)+(1|Blk), data=FNRE_all)
 
 anova(model_average)
 
@@ -344,19 +348,19 @@ FNRE_all_graph
 FNRE_combined <- ggarrange(FNRE_2021_graph,
                                FNRE_2022_graph,
                                FNRE_2023_graph,
-                               FNRE_all_graph,
-                               nrow = 2,
-                               ncol = 2,
+                               #FNRE_all_graph,
+                               nrow = 1,
+                               #ncol = 2,
                                #common.legend = TRUE,
                                legend.grob = get_legend(FNRE_all_graph),
                                legend= "bottom")
 
 
-ggsave(filename = "FNRE_combined.jpg",  # Include the file extension here
+ggsave(filename = "FNRE_combined_all_year.jpg",  # Include the file extension here
        plot = FNRE_combined,              # Specify the plot
-       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
        dpi = 400,
-       height = 30, width = 40, units = "cm")
+       height = 15, width = 40, units = "cm")
 ```
 
 # Combine into 1 excel file 
