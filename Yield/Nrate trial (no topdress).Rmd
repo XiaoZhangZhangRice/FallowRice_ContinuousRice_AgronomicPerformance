@@ -55,21 +55,9 @@ str(master)
 # Initial visualisation
 
 ```{r}
-ggplot(master, aes(y=Yield_Mgha, x=Nrate, color=Field))+ 
+ggplot(master%>% filter (Topdressed != 1), aes(y=Yield_Mgha, x=Nrate, color=Field))+ 
   geom_point()+
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size= 9))
-```
-
-# Check for most important variables
-
-> Year effect very significant. So analyse data by 3 different years. 
-
-```{r}
-all_factors_model <- lm(Yield_Mgha~Year+Blk+NrateF+Field+Topdressed, data = master)
-
-pls205_diagnostics(all_factors_model)
-
-anova(all_factors_model)
 ```
 
 # Subset data from the 3 years
@@ -86,7 +74,7 @@ yield_2023 <- notopdress %>% filter (Year == "2023")
 #checked datasets, all looks good. 
 ```
 
-# Treatment and year effect (Corresponds to Table 1: ANOVA)
+# Treatment, Nrate, and year effect (Corresponds to Table 1: ANOVA)
 
 ```{r}
 model_all_years <- lmer(Yield_Mgha ~ Treatment*Year++NrateF+NrateF:Treatment+Treatment:Year+(1|Blk:Treatment)+(1|Blk), data = yield_average)
@@ -295,7 +283,7 @@ N_response_curve_2021 <-
 ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_point(data=yield_2021_dataframe, size=2.5)+ #this is the mean values
   geom_point(data=yield_2021, size=1, alpha=0.4)+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
   #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
@@ -342,7 +330,7 @@ geom_segment(
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Nrate_optimal), 
       y = 0,  # Start exactly from 0 on y-axis
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Yield_max)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 ) +
 
 # Horizontal line for CR
@@ -359,7 +347,7 @@ geom_segment(
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Yield_max), 
       x = -20,  # Start exactly from 0 on x-axis
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2021") %>% pull(Nrate_optimal)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 )+
       geom_curve(x = top_yields_2021 %>% 
                  filter(Treatment == "FR") %>% 
@@ -444,7 +432,7 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
              aes(x=Nrate, y=Yield_Mgha, color="CR"), size=2.5, shape ="triangle") +  
   #geom_point(data=yield_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
   geom_point(data=yield_2022, size=1, alpha=0.4, shape ="triangle")+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
   #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
@@ -482,7 +470,7 @@ geom_segment(
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
       y = 0,  # Start exactly from 0 on y-axis
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 ) +
 
 # Horizontal line for CR
@@ -499,7 +487,7 @@ geom_segment(
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
       x = -20,  # Start exactly from 0 on x-axis
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 )+
   stat_regline_equation(data=yield_2022,
                       aes(x=Nrate, y=Yield_Mgha, color=Treatment, group = Treatment, 
@@ -586,7 +574,7 @@ N_response_curve_2023 <-
 ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_point(data=yield_2023_dataframe, size=2.5, shape ="square")+ #this is the mean values
   geom_point(data=yield_2023, size=1, alpha=0.4, shape ="square")+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 320), breaks = seq(0, 300, by=50), expand =c(0,0))+
   #scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 90, 120, 150, 180, 210), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
@@ -623,7 +611,7 @@ geom_segment(
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Nrate_optimal), 
       y = 0,  # Start exactly from 0 on y-axis
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Yield_max)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 ) +
 
 # Horizontal line for CR
@@ -640,7 +628,7 @@ geom_segment(
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Yield_max), 
       x = -20,  # Start exactly from 0 on x-axis
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2023") %>% pull(Nrate_optimal)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 )+
     geom_curve(x = top_yields_2023 %>% 
                  filter(Treatment == "FR") %>% 
@@ -726,7 +714,7 @@ N_response_curve_average_v1 <-
 ggplot(yield_average_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_point(data=yield_average_dataframe, size=2.5)+ #this is the mean values
   geom_point(data=yield_average, size=1, alpha=0.4, aes(shape=Year))+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
   scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(-5, 290), breaks = c(0, 115, 155, 185, 225, 260))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 20), breaks = seq(0, 20, by = 2.5))+ #, limits = c(0, 16000), expand = c(0, 0), breaks =
   #geom_errorbar(data=yield_average_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
@@ -765,7 +753,7 @@ ggplot(yield_average_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   )+ 
   geom_vline(
     aes(xintercept = optimal_results %>% filter(Treatment == "FR") %>% filter(Year == "average") %>% pull(Nrate_optimal)),
-    linetype = "twodash", color = "#FFCC66", size = 1
+    linetype = "twodash", color = "#FF9900", size = 1
   )+
     geom_curve(x = top_yields_average %>% 
                  filter(Treatment == "FR") %>% 
@@ -825,7 +813,7 @@ ggplot(yield_average, aes(x=Nrate, y=Yield_Mgha, color=Treatment, shape=Year))+
                  filter(Nrate==0)  %>%
                  filter(Treatment == "FR") %>% 
                  pull(Yield_Mgha),
-               color = "#FFCC66", size=2)+
+               color = "#FF9900", size=2)+
   geom_segment(x = -10, 
             y = yield_average_dataframe %>% 
                  filter(Nrate==0)  %>%
@@ -838,7 +826,7 @@ ggplot(yield_average, aes(x=Nrate, y=Yield_Mgha, color=Treatment, shape=Year))+
                  pull(Yield_Mgha),
                color = "#0072B2", size=2)+
   #geom_point(data=yield_average, size=1, alpha=0.4)+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
  scale_x_continuous(name=expression("N Rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = c(0, 115, 155, 185, 225, 260), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
   theme_classic()+
@@ -905,33 +893,7 @@ ggsave(filename = "2022_NResponse.jpg",  # Include the file extension here
        height = 15, width = 15, units = "cm")
 ```
 
-# Combine 0N yields into 1 excel file 
-
-```{r}
-all_means <- rbind(as.data.frame(field_means_2021) %>% mutate(Year = 2021),
-                   as.data.frame(field_means_2022) %>% mutate(Year = 2022),
-                   as.data.frame(field_means_2023) %>% mutate(Year = 2023),
-                   as.data.frame(field_means_average) %>% mutate(Year = "Avg")
-                  ) %>% arrange(Year) %>% filter(NrateF == "0") %>%
-  mutate(yield = round(emmean, 1))
-
-write_xlsx(all_means, "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Yield/Yield_by_year_0N.xlsx")
-```
-
-
-# Zero N
-
-```{r}
-zero_N <- yield_average %>% filter(Nrate == 0)
-
-model_zero <- lmer(Yield_Mgha ~ Treatment*Year+(1|Blk), data=zero_N)
-
-zero_means_average = emmeans(model_zero,spec = 'Treatment', by = "Year")
-zero_effects_average = contrast(zero_means_average, method = 'pairwise', adjust = "Tukey")
-summary(zero_effects_average)
-```
-
-# Graphical abstract
+# Graphical abstract graph
 
 ```{r}
 N_response_curve_graphical_abstract <- 
@@ -942,7 +904,7 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
              aes(x=Nrate, y=Yield_Mgha, color="CR"), size=2.5) +  
   #geom_point(data=yield_2022_dataframe, size=2.5, shape ="triangle")+ #this is the mean values
   #geom_point(data=yield_2022, size=1, alpha=0.4, shape ="triangle")+ #this are the raw values
-  scale_color_manual(values=c("#0072B2","#FFCC66"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
+  scale_color_manual(values=c("#0072B2","#FF9900"), name = "Treatment", labels = c('Continuous Rice (CR)','Fallow Rice (FR)'))+
   scale_x_continuous(name=expression("N rate (kg N ha"^{-1}*")"), limits = c(-20, 280), breaks = seq(0, 300, by=50), expand =c(0,0))+ #limits = c(0, 
   scale_y_continuous(name= expression("Yield (Mg ha"^{-1}*")"), limits = c(0, 22), breaks = seq(0, 22, by = 2.5), expand =c(0,0))+
   #geom_errorbar(data=yield_2022_dataframe, aes(ymin=Yield_Mgha-Yield_Mgha_se, ymax=Yield_Mgha+Yield_Mgha_se), width=8, size=0.7)+
@@ -978,7 +940,7 @@ geom_segment(
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal), 
       y = 0,  # Start exactly from 0 on y-axis
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 ) +
 
 # Horizontal line for CR
@@ -995,7 +957,7 @@ geom_segment(
       yend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Yield_max), 
       x = -20,  # Start exactly from 0 on x-axis
       xend = optimal_results %>% filter(Treatment == "FR", Year == "2022") %>% pull(Nrate_optimal)),
-  linetype = "twodash", color = "#FFCC66", size = 0.6
+  linetype = "twodash", color = "#FF9900", size = 0.6
 )+
     geom_curve(x = top_yields_2022 %>% 
                  filter(Treatment == "FR") %>% 

@@ -127,7 +127,7 @@ pls205_diagnostics(all_factors_model)
 anova(all_factors_model)
 ```
 
-# 2021
+# 2021 (Table 2)
 
 ## Statistical tests
 
@@ -186,7 +186,7 @@ FNRE_2021_graph
 ```
 
 
-# 2022
+# 2022 (Table 2)
 
 ## Statistical tests
 
@@ -243,7 +243,7 @@ FNRE_2022_graph
 ```
 
 
-# 2023
+# 2023 (Table 2)
 
 ## Statistical tests
 

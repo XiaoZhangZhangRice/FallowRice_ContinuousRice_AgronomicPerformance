@@ -215,7 +215,7 @@ ggplot(N_zero_2022, aes(x=Days, y=N_total_kgha, color=Treatment))+
 N_zero_graph_2022
 ```
 
-## Average_zero
+## Average_zero (Figure 4)
 
 ### Pairise Comparisons average
 
@@ -409,7 +409,7 @@ ggplot(N_185_2022, aes(x=Days, y=N_total_kgha, color=Treatment))+
 ```
 
 
-## Average_185
+## Average_185 (Figure 4)
 
 ### Pairise Comparisons average
 
