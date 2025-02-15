@@ -2,7 +2,7 @@
 \contentsline {section}{Read and check data}{2}{section*.3}%
 \contentsline {section}{Calculate FNRE for each plot}{2}{section*.4}%
 \contentsline {section}{Split data by year}{3}{section*.5}%
-\contentsline {section}{General linear model to do some exploratory analysis}{3}{section*.6}%
+\contentsline {section}{Linear model to do some exploratory analysis}{3}{section*.6}%
 \contentsline {section}{2021 (Table 2)}{4}{section*.7}%
 \contentsline {subsection}{Statistical tests}{4}{section*.8}%
 \contentsline {subsection}{2021 graph}{7}{section*.9}%

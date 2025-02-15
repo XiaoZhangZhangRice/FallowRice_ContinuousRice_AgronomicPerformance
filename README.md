@@ -10,4 +10,11 @@ Topdressed plots are indicated with (1) in the "topdress" column of datasets. (0
 
 Note that data from topdressed plots were not used in the paper. The data is only shared with such that individuals who may require such data in their research have access to it in a public repository. 
 
+Packages: 
+
+The PLS205 package was used to generate scale-location and qq plots. Should a user wish to use the package, the package may be installed with the following commands.
+
+# install.packages("devtools")
+# devtools::install_github('deruncie/PLS205_package')
+
 Researchers who require clarifications of the dataset may contact Zhang (zhangzhenglin2005@gmail.com). 

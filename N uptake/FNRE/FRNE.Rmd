@@ -115,7 +115,7 @@ FNRE_2023 <- master_with_FNRE %>%
 table(FNRE_2021$Nrate_kgha)
 ```
 
-# General linear model to do some exploratory analysis
+# Linear model to do some exploratory analysis
 
 Seems that there is an effect of Nrate and Year. But no treatment effects. 
 
