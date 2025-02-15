@@ -14,7 +14,9 @@ Packages:
 
 The PLS205 package was used to generate scale-location and qq plots. Should a user wish to use the package, the package may be installed with the following commands.
 
-# install.packages("devtools")
-# devtools::install_github('deruncie/PLS205_package')
+```
+install.packages("devtools")
+devtools::install_github('deruncie/PLS205_package')
+```
 
 Researchers who require clarifications of the dataset may contact Zhang (zhangzhenglin2005@gmail.com). 
