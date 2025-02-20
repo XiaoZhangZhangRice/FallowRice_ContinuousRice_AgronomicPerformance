@@ -21,5 +21,4 @@
 \contentsline {section}{All together}{18}{section*.22}%
 \contentsline {subsection}{Statistical tests}{18}{section*.23}%
 \contentsline {subsection}{All together graph}{22}{section*.24}%
-\contentsline {section}{Combine into 1 graph}{23}{section*.25}%
-\contentsline {section}{Combine into 1 excel file}{24}{section*.26}%
+\contentsline {section}{Combine into 1 excel file}{23}{section*.25}%

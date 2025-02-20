@@ -342,26 +342,7 @@ FNRE_all_graph
 ```
 
 
-# Combine into 1 graph
 
-```{r}
-FNRE_combined <- ggarrange(FNRE_2021_graph,
-                               FNRE_2022_graph,
-                               FNRE_2023_graph,
-                               #FNRE_all_graph,
-                               nrow = 1,
-                               #ncol = 2,
-                               #common.legend = TRUE,
-                               legend.grob = get_legend(FNRE_all_graph),
-                               legend= "bottom")
-
-
-ggsave(filename = "FNRE_combined_all_year.jpg",  # Include the file extension here
-       plot = FNRE_combined,              # Specify the plot
-       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
-       dpi = 400,
-       height = 15, width = 40, units = "cm")
-```
 
 # Combine into 1 excel file 
 
@@ -371,7 +352,7 @@ all_means <- rbind(as.data.frame(means_2021) %>% mutate(Year = 2021),
                    as.data.frame(means_2023) %>% mutate(Year = 2023)
 ) %>% arrange(Treatment,Year)
 
-write_xlsx(all_means, "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/N uptake/FNRE/FNRE_by_year_Nrate.xlsx")
+write_xlsx(all_means, "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/N uptake/FNRE/FNRE_by_year_Nrate.xlsx")
 
 ```
 
