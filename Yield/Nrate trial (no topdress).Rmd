@@ -302,7 +302,7 @@ ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
                       formula = y ~ poly(x, 2, raw = TRUE),
                       show.legend = FALSE, label.x = 0, label.y = c(17.5, 20))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
-  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   ggtitle(expression("Yield: 2021"))+
   annotate(
@@ -441,7 +441,7 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_smooth(data = yield_2022, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
   #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
-  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   theme(legend.position = "bottom")+
   ggtitle(expression("Yield: 2022"))+
@@ -583,7 +583,7 @@ ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   geom_smooth(data = yield_2023, method = "lm", formula = y ~ poly(x, 2), se = FALSE)+
   #geom_vline(xintercept = c(0, 115, 155, 185, 225, 260), linetype = "twodash", color = "black") +
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
-  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   ggtitle(expression("Yield: 2023"))+
 annotate(

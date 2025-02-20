@@ -271,7 +271,7 @@ ggplot(N_zero_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
   #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
   theme_classic()+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
-  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   geom_text(data=N_zero_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
   label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
@@ -465,7 +465,7 @@ ggplot(N_185_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
   #geom_vline(xintercept = c(41, 50, 78, 84, 121, 136), linetype = "dashed", color = "black") +
   theme_classic()+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
-  theme(legend.text = element_text(size = 12),legend.title = element_text(size = 14))+
+  theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   geom_text(data=N_185_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
   label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
@@ -493,7 +493,7 @@ all_N_uptake_overtime
 
 ggsave(all_N_uptake_overtime, 
        filename = "all_N_uptake_overtime.jpg", 
-       path = "D:/Academics/UC Davis/School Work/Linquist Lab/Data/R stats/Agronomic paper/Figures",
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
        height = 20, width = 30, 
        units = "cm", dpi=400)
 
