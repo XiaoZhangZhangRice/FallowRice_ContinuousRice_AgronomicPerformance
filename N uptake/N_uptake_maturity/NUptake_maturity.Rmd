@@ -123,7 +123,7 @@ ggplot(Nrate_trial_2021, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
-  ggtitle(expression("N uptake"[maturity]~": 2021"))
+  ggtitle(expression("2021"))
   #annotate(
   #"text",
   #x = c(0),
@@ -195,7 +195,7 @@ ggplot(Nrate_trial_2022, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
-  ggtitle(expression("N uptake"[maturity]~": 2022"))
+  ggtitle(expression("2022"))
 
 Nuptake_graph_2022
 ```
@@ -256,7 +256,7 @@ ggplot(Nrate_trial_2023, aes(x=Nrate_kgha, y=N_total_kgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
-  ggtitle(expression("N uptake"[maturity]~": 2023"))
+  ggtitle(expression("2023"))
 
 
 Nuptake_graph_2023

@@ -302,7 +302,7 @@ ggplot(yield_2021_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
-  ggtitle(expression("Yield: 2021"))+
+  ggtitle(expression("2021"))+
   annotate(
   "text",
   x = c(0),
@@ -442,7 +442,7 @@ ggplot(yield_2022_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   theme(legend.position = "bottom")+
-  ggtitle(expression("Yield: 2022"))+
+  ggtitle(expression("2022"))+
   annotate(
   "text",
   x = c(0),
@@ -583,7 +583,7 @@ ggplot(yield_2023_dataframe, aes(x=Nrate, y=Yield_Mgha, color=Treatment))+
   theme(axis.text = element_text(size = 14), axis.title = element_text(size=16))+
   theme(legend.text = element_text(size = 16),legend.title = element_text(size = 18))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
-  ggtitle(expression("Yield: 2023"))+
+  ggtitle(expression("2023"))+
 annotate(
   "text",
   x = c(0),

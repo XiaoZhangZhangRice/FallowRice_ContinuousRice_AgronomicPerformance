@@ -131,7 +131,7 @@ ggplot(N_zero_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   geom_text(data=N_zero_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
   label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
-  ggtitle(expression("N uptake over time: 0 kg N ha"^{-1}*""))
+  ggtitle(expression("N rate: 0 kg N ha"^{-1}*""))
 
 N_zero_graph_average
 ```
@@ -199,7 +199,7 @@ ggplot(N_185_average, aes(x=Days, y=N_total_kgha, color=Treatment))+
   theme(plot.title = element_text(hjust = 0.5, size = 20, face = "bold"))+
   geom_text(data=N_185_graphing_average %>% filter(Treatment == "FR"), aes(x=Days, y=N_total_kgha+N_total_kgha_se+5,
   label=sprintf(p_value)), size=8, vjust=-0.5, color="black")+
-  ggtitle(expression("N uptake over time: 185 kg N ha"^{-1}*""))
+  ggtitle(expression("N rate: 185 kg N ha"^{-1}*""))
 
 N_185_graph_average
 ```
