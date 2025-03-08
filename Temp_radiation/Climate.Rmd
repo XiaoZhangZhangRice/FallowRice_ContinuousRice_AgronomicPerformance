@@ -1,0 +1,200 @@
+---
+title: "Temperature  and Radiation"
+author: "Zhang Zhenglin"
+output:
+  pdf_document:
+    toc: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+# Necessary libraries
+
+```{r message=FALSE,warning=FALSE}
+library(knitr)
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+# https://bookdown.org/ansellbr/WEHI_tidyR_course_book/
+library(stringr) 
+library(data.table)
+library(GGally)
+library(formatR)
+library(readxl)
+library(paletteer )
+library(ggpubr)
+```
+
+# Monthly
+
+## Read from excel
+
+```{r}
+#read directly from the directory where I generated the files from
+monthly <- read_excel("C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Temp_radiation/monthly.xlsx", sheet = 1)
+
+monthly$Solar_Rad <- monthly$"Avg Sol Rad (W/sq.m)"
+monthly$Min_Temp <- monthly$"Avg Min Air Temp (C)"
+monthly$Max_Temp <- monthly$"Avg Max Air Temp (C)"
+monthly$Avg_Temp <- monthly$"Avg Air Temp (C)"
+
+monthly$Month_Year <- monthly$"Month Year"
+
+
+
+
+monthly <- monthly %>%
+  mutate(Year = format(Month_Year, "%Y")) %>%
+  mutate(Month = format(Month_Year, "%b"))
+
+data_2021 <- monthly %>% filter(Year == "2021")
+data_2022 <- monthly %>% filter(Year == "2022")
+data_2023 <- monthly %>% filter(Year == "2023")
+
+
+str(monthly)
+
+which.max(monthly$Solar_Rad)
+```
+# 2021 graph
+
+```{r}
+graph_2021 <-
+ggplot(data_2021, aes(x = Month_Year)) +
+  geom_bar(stat = "identity", aes(y = Solar_Rad, fill = "Solar_Rad"), fill = "#808080FF",  alpha = 0.8) +  # Adjust width and transparency
+  geom_line(aes(y = Avg_Temp * 10, color = "Avg_Temp"), color = "Black", size = 0.7) +
+  geom_point(aes(y = Avg_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Min_Temp * 10, color = "Min_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Min_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Max_Temp * 10, color = "Max_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Max_Temp * 10), color = "Black", size = 2) +
+  scale_x_datetime(
+    name = "",
+    date_breaks = "1 month",  # Breaks at every month
+    date_labels = "%b",  # Format as abbreviated month names
+    expand = c(0.05, 0)
+  ) +
+  scale_y_continuous(
+    expression("Daily Solar Radiation (W/m"^{2}*")"),
+    sec.axis = sec_axis(~ ./10, name = expression("Temperature " (degree*C))),
+    expand = c(0, 0),
+    breaks = seq(0, 400, by = 50),
+    limits = c(0, 400)
+  ) +
+  theme_classic() +
+  ggtitle("2021") +
+  theme(
+    text = element_text(size = 10),
+    axis.text.x = element_text(size = 12, angle = 50, hjust = 1.5, vjust = 1.4),
+    axis.text.y = element_text(size = 13),
+    axis.title = element_text(size =15),
+    plot.title = element_text(hjust = 0.5, size = 15, face = "bold")
+  )  # Darken legend text
+#ggsave(graph_2021, filename = "climate_graph_LowRes.png", height = 15, width = 15, units = "cm", dpi = 400)
+
+```
+# 2022 graph
+
+```{r}
+graph_2022 <-
+ggplot(data_2022, aes(x = Month_Year)) +
+  geom_bar(stat = "identity", aes(y = Solar_Rad, fill = "Solar_Rad"), fill = "#808080FF",  alpha = 0.8) +  # Adjust width and transparency
+  geom_line(aes(y = Avg_Temp * 10, color = "Avg_Temp"), color = "Black", size = 0.7) +
+  geom_point(aes(y = Avg_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Min_Temp * 10, color = "Min_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Min_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Max_Temp * 10, color = "Max_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Max_Temp * 10), color = "Black", size = 2) +
+  scale_x_datetime(
+    name = "",
+    date_breaks = "1 month",  # Breaks at every month
+    date_labels = "%b",  # Format as abbreviated month names
+    expand = c(0.05, 0)
+  ) +
+  scale_y_continuous(
+    expression("Daily Solar Radiation (W/m"^{2}*")"),
+    sec.axis = sec_axis(~ ./10, name = expression("Temperature " (degree*C))),
+    expand = c(0, 0),
+    breaks = seq(0, 400, by = 50),
+    limits = c(0, 400)
+  ) +
+  theme_classic() +
+  ggtitle("2022") +
+  theme(
+    text = element_text(size = 10),
+    axis.text.x = element_text(size = 12, angle = 50, hjust = 1.5, vjust = 1.4),
+    axis.text.y = element_text(size = 13),
+    axis.title = element_text(size =15),
+    plot.title = element_text(hjust = 0.5, size = 15, face = "bold")
+  )  # Darken legend text
+#ggsave(graph_2022, filename = "climate_graph_LowRes.png", height = 15, width = 15, units = "cm", dpi = 400)
+
+```
+
+# 2023 graph
+
+```{r}
+graph_2023 <-
+ggplot(data_2023, aes(x = Month_Year)) +
+  geom_bar(stat = "identity", aes(y = Solar_Rad, fill = "Solar_Rad"), fill = "#808080FF",  alpha = 0.8) +  # Adjust width and transparency
+  geom_line(aes(y = Avg_Temp * 10, color = "Avg_Temp"), color = "Black", size = 0.7) +
+  geom_point(aes(y = Avg_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Min_Temp * 10, color = "Min_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Min_Temp * 10), color = "Black", size = 2) +
+  geom_line(aes(y = Max_Temp * 10, color = "Max_Temp"), color = "Black", size = 0.7, linetype = "twodash") +
+  geom_point(aes(y = Max_Temp * 10), color = "Black", size = 2) +
+  scale_x_datetime(
+    name = "",
+    date_breaks = "1 month",  # Breaks at every month
+    date_labels = "%b",  # Format as abbreviated month names
+    expand = c(0.05, 0)
+  ) +
+  scale_y_continuous(
+    expression("Daily Solar Radiation (W/m"^{2}*")"),
+    sec.axis = sec_axis(~ ./10, name = expression("Temperature " (degree*C))),
+    expand = c(0, 0),
+    breaks = seq(0, 400, by = 50),
+    limits = c(0, 400)
+  ) +
+  theme_classic() +
+  ggtitle("2023") +
+  theme(
+    text = element_text(size = 10),
+    axis.text.x = element_text(size = 12, angle = 50, hjust = 1.5, vjust = 1.4),
+    axis.text.y = element_text(size = 13),
+    axis.title = element_text(size =15),
+    plot.title = element_text(hjust = 0.5, size = 15, face = "bold")
+  )  # Darken legend text
+#ggsave(graph_2023, filename = "climate_graph_LowRes.png", height = 15, width = 15, units = "cm", dpi = 400)
+```
+
+
+# Combine into one graph 
+
+```{r}
+all_climate <- ggarrange(graph_2021,
+                    graph_2022,
+                    graph_2023,
+                               nrow = 3,
+                               ncol = 1,
+                               common.legend = TRUE,
+                               #legend.grob = get_legend(N_response_curve_average),
+                               legend= "bottom")
+
+ggsave(filename = "Climate.jpg",  # Include the file extension here
+       plot = all_climate,              # Specify the plot
+       path = "C:/Users/zhang/Documents/GitHub/FallowRice_ContinuousRice_AgronomicPerformance/Figures",
+       dpi = 400,
+       height = 30, width = 12, units = "cm")
+```
+
+
